@@ -1,0 +1,7 @@
+json
+{
+  "extends": "next/core-web-api",
+  "rules": {
+    "react/no-unescaped-entities": "off"
+  }
+}
