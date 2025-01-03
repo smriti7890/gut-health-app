@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, DragEvent } from 'react';
 
 interface UserProfile {
   username: string;
@@ -24,6 +24,7 @@ interface FoodItem {
   };
   customFood?: boolean;
   createdBy?: string;
+  editable?: boolean;
 }
 
 interface Recipe {
@@ -32,12 +33,15 @@ interface Recipe {
   createdBy: string;
   foods: FoodItem[];
   description: string;
+  instructions: string[];
   healthScore: number;
   likes: number;
   likedBy: string[];
   tags: string[];
   createdAt: string;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  prepTime?: string;
+  servings?: number;
 }
 
 interface MealPlan {
@@ -53,15 +57,15 @@ interface MealPlan {
 
 type MealType = keyof MealPlan['meals'];
 
-// Food emoji mapping
+// Food emoji mapping with categories
 const foodEmojis: { [key: string]: string[] } = {
-  'Fruits': ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🍑', '🥝', '🍍', '🥭', '🍎'],
-  'Vegetables': ['🥬', '🥦', '🥒', '🌶️', '🫑', '🥕', '🧅', '🧄', '🍆', '🥔', '🥑', '🍅', '🥗'],
+  'Fruits': ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🍑', '🥝', '🍍', '🥭'],
+  'Vegetables': ['🥬', '🥦', '🥒', '🌶️', '🫑', '🥕', '🧅', '🧄', '🍆', '🥔', '🥑', '🍅'],
   'Proteins': ['🥩', '🍗', '🍖', '🍣', '🍤', '🥚', '🫘', '🥜'],
   'Dairy': ['🥛', '🧀', '🫕', '🧈', '🍦'],
   'Grains': ['🍚', '🍜', '🥖', '🥨', '🥯', '🥞', '🧇'],
-  'Drinks': ['🫖', '☕', '🧃', '🥤', '🧋'],
-  'Other': ['🍯', '🫃', '🥫', '🍪', '🍩']
+  'Fermented': ['🫖', '🥬'],
+  'Other': ['🍯', '🥫', '🍪', '🍩']
 };
 
 const foodCategories = [
@@ -83,6 +87,24 @@ const dietaryFilters = [
 
 const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
+const healthImpacts = {
+  positive: {
+    label: 'Beneficial',
+    color: 'green',
+    description: 'Supports gut health'
+  },
+  negative: {
+    label: 'Harmful',
+    color: 'red',
+    description: 'May disrupt gut balance'
+  },
+  neutral: {
+    label: 'Neutral',
+    color: 'gray',
+    description: 'No significant impact'
+  }
+};
+
 
 const foodItems: FoodItem[] = [
   {
@@ -91,7 +113,7 @@ const foodItems: FoodItem[] = [
     category: 'probiotic',
     icon: '🥛',
     impact: 'positive',
-    description: 'Rich in probiotics and protein',
+    description: 'Rich in probiotics and protein, supports digestive health',
     foodGroup: 'Dairy & Alternatives',
     dietaryInfo: {
       isVegan: false,
@@ -106,7 +128,7 @@ const foodItems: FoodItem[] = [
     category: 'probiotic',
     icon: '🥬',
     impact: 'positive',
-    description: 'Fermented vegetables with probiotics',
+    description: 'Fermented vegetables rich in beneficial bacteria',
     foodGroup: 'Fermented Foods',
     dietaryInfo: {
       isVegan: true,
@@ -117,12 +139,12 @@ const foodItems: FoodItem[] = [
   },
   {
     id: '3',
-    name: 'Quinoa',
-    category: 'prebiotic',
-    icon: '🌾',
+    name: 'Kombucha',
+    category: 'probiotic',
+    icon: '🫖',
     impact: 'positive',
-    description: 'High-fiber, nutrient-rich grain',
-    foodGroup: 'Grains',
+    description: 'Fermented tea with probiotics and antioxidants',
+    foodGroup: 'Fermented Foods',
     dietaryInfo: {
       isVegan: true,
       isVegetarian: true,
@@ -136,7 +158,7 @@ const foodItems: FoodItem[] = [
     category: 'probiotic',
     icon: '🥬',
     impact: 'positive',
-    description: 'Fermented cabbage with probiotics',
+    description: 'Fermented cabbage rich in probiotics',
     foodGroup: 'Fermented Foods',
     dietaryInfo: {
       isVegan: true,
@@ -151,8 +173,23 @@ const foodItems: FoodItem[] = [
     category: 'prebiotic',
     icon: '🍠',
     impact: 'positive',
-    description: 'Rich in fiber and nutrients',
+    description: 'Rich in fiber that feeds beneficial gut bacteria',
     foodGroup: 'Fruits & Vegetables',
+    dietaryInfo: {
+      isVegan: true,
+      isVegetarian: true,
+      isGlutenFree: true,
+      isDairyFree: true
+    }
+  },
+  {
+    id: '6',
+    name: 'Processed Sugar',
+    category: 'inflammatory',
+    icon: '🍬',
+    impact: 'negative',
+    description: 'Can disrupt gut bacterial balance and promote inflammation',
+    foodGroup: 'Snacks & Others',
     dietaryInfo: {
       isVegan: true,
       isVegetarian: true,
@@ -165,47 +202,52 @@ const foodItems: FoodItem[] = [
 const sampleRecipes: Recipe[] = [
   {
     id: '1',
-    name: 'Probiotic Breakfast Bowl',
+    name: 'Probiotic Power Bowl',
     createdBy: 'system',
     foods: [
-      {
-        ...foodItems[0], // Greek Yogurt
-        id: 'recipe-1-food-1'
-      },
-      {
-        ...foodItems[1], // Kimchi
-        id: 'recipe-1-food-2'
-      }
+      { ...foodItems[0], id: 'recipe-1-food-1' }, // Greek Yogurt
+      { ...foodItems[1], id: 'recipe-1-food-2' }, // Kimchi
+      { ...foodItems[4], id: 'recipe-1-food-3' }  // Sweet Potato
     ],
-    description: 'A gut-healthy breakfast bowl packed with probiotics',
-    healthScore: 85,
+    description: 'A gut-healthy breakfast bowl packed with probiotics and fiber',
+    instructions: [
+      'Start with a base of Greek yogurt',
+      'Add diced sweet potato (cooked and cooled)',
+      'Top with kimchi',
+      'Optional: add a drizzle of honey for sweetness'
+    ],
+    healthScore: 90,
     likes: 24,
     likedBy: [],
     tags: ['breakfast', 'probiotic', 'high-protein'],
     createdAt: new Date().toISOString(),
-    mealType: 'breakfast'
+    mealType: 'breakfast',
+    prepTime: '10 minutes',
+    servings: 1
   },
   {
     id: '2',
-    name: 'Gut Health Power Lunch',
+    name: 'Fermented Feast Bowl',
     createdBy: 'system',
     foods: [
-      {
-        ...foodItems[2], // Quinoa
-        id: 'recipe-2-food-1'
-      },
-      {
-        ...foodItems[4], // Sweet Potato
-        id: 'recipe-2-food-2'
-      }
+      { ...foodItems[1], id: 'recipe-2-food-1' }, // Kimchi
+      { ...foodItems[3], id: 'recipe-2-food-2' }, // Sauerkraut
+      { ...foodItems[2], id: 'recipe-2-food-3' }  // Kombucha
     ],
-    description: 'A fiber-rich lunch that supports digestive health',
-    healthScore: 90,
+    description: 'A powerful combination of fermented foods for optimal gut health',
+    instructions: [
+      'Combine kimchi and sauerkraut in a bowl',
+      'Serve with a glass of kombucha',
+      'Optional: add brown rice for a complete meal'
+    ],
+    healthScore: 95,
     likes: 18,
     likedBy: [],
-    tags: ['lunch', 'high-fiber', 'vegetarian'],
+    tags: ['lunch', 'probiotic', 'fermented'],
     createdAt: new Date().toISOString(),
-    mealType: 'lunch'
+    mealType: 'lunch',
+    prepTime: '5 minutes',
+    servings: 1
   }
 ];
 
@@ -239,7 +281,6 @@ const symptoms = [
 ];
 
 
-
 export default function Home() {
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -256,6 +297,7 @@ export default function Home() {
   const [gutHealth, setGutHealth] = useState<number>(70);
   const [recentReactions, setRecentReactions] = useState<string[]>([]);
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [meterFoods, setMeterFoods] = useState<FoodItem[]>([]);
 
   // Food and recipe states
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -269,14 +311,18 @@ export default function Home() {
   const [selectedEmojis, setSelectedEmojis] = useState<string[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [selectedEmojiCategory, setSelectedEmojiCategory] = useState<string>('Fruits');
+  const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
 
   // New recipe creation states
   const [newRecipe, setNewRecipe] = useState<Partial<Recipe>>({
     name: '',
     description: '',
     foods: [],
+    instructions: [],
     tags: [],
-    mealType: 'breakfast'
+    mealType: 'breakfast',
+    prepTime: '',
+    servings: 1
   });
 
   // Meal planning states
@@ -344,6 +390,22 @@ export default function Home() {
     }
   };
 
+  const handleFoodDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const foodId = e.dataTransfer.getData('foodId');
+    const food = [...foodItems, ...customFoods].find(f => f.id === foodId);
+    if (food) {
+      const newFood = { ...food, id: `meter-${Date.now()}`, editable: true };
+      setMeterFoods(prev => [...prev, newFood]);
+      updateGutHealth(newFood.impact);
+    }
+  };
+
+  const updateGutHealth = (impact: 'positive' | 'negative' | 'neutral') => {
+    const healthChange = impact === 'positive' ? 5 : impact === 'negative' ? -5 : 0;
+    setGutHealth(prev => Math.min(Math.max(prev + healthChange, 0), 100));
+  };
+
   const handleFoodSelect = (food: FoodItem) => {
     setSelectedFood(food);
     const healthChange = food.impact === 'positive' ? 5 : food.impact === 'negative' ? -5 : 0;
@@ -361,7 +423,8 @@ export default function Home() {
         ...newCustomFood as FoodItem,
         id: `custom-${Date.now()}`,
         customFood: true,
-        createdBy: userProfile.username
+        createdBy: userProfile.username,
+        editable: true
       };
       setCustomFoods(prev => [...prev, customFood]);
       setShowAddCustomFood(false);
@@ -382,6 +445,36 @@ export default function Home() {
     }
   };
 
+  const editFood = (foodId: string) => {
+    const food = meterFoods.find(f => f.id === foodId);
+    if (food && food.editable) {
+      setEditingFoodId(foodId);
+      setNewCustomFood(food);
+      setShowAddCustomFood(true);
+    }
+  };
+
+  const updateFood = (updatedFood: FoodItem) => {
+    if (editingFoodId) {
+      setMeterFoods(prev => 
+        prev.map(food => 
+          food.id === editingFoodId ? { ...updatedFood, id: editingFoodId } : food
+        )
+      );
+      setEditingFoodId(null);
+    }
+  };
+
+  const removeFood = (foodId: string) => {
+    const food = meterFoods.find(f => f.id === foodId);
+    if (food) {
+      updateGutHealth(food.impact === 'positive' ? 'negative' : food.impact === 'negative' ? 'positive' : 'neutral');
+      setMeterFoods(prev => prev.filter(f => f.id !== foodId));
+    }
+  };
+
+
+// More Handler Functions
   const createNewRecipe = () => {
     if (newRecipe.name && newRecipe.foods?.length) {
       const recipe: Recipe = {
@@ -398,8 +491,11 @@ export default function Home() {
         name: '',
         description: '',
         foods: [],
+        instructions: [],
         tags: [],
-        mealType: 'breakfast'
+        mealType: 'breakfast',
+        prepTime: '',
+        servings: 1
       });
       setShowRecipeCreator(false);
     }
@@ -439,14 +535,49 @@ export default function Home() {
     }
   };
 
+  const addFoodToMeal = (food: FoodItem) => {
+    const newMealPlan = [...mealPlan];
+    const dayIndex = newMealPlan.findIndex(d => d.day === selectedDay);
+    if (dayIndex !== -1 && selectedMealType) {
+      const mealTypeKey = selectedMealType.toLowerCase() as MealType;
+      newMealPlan[dayIndex].meals[mealTypeKey].push({
+        ...food,
+        id: `meal-${Date.now()}-${Math.random()}`
+      });
+      setMealPlan(newMealPlan);
+      setShowFoodSelector(false);
+    }
+  };
+
   const getHealthColor = () => {
     if (gutHealth > 70) return 'text-green-500';
     if (gutHealth > 40) return 'text-yellow-500';
     return 'text-red-500';
   };
 
+  // Filter functions
+  const filteredFoods = [...foodItems, ...customFoods].filter(food => {
+    const matchesSearch = food.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesGroup = selectedFoodGroup === 'All' || food.foodGroup === selectedFoodGroup;
+    const matchesDietary = selectedDietaryFilters.length === 0 || 
+      selectedDietaryFilters.every(filter => {
+        switch(filter) {
+          case 'vegan':
+            return food.dietaryInfo.isVegan;
+          case 'vegetarian':
+            return food.dietaryInfo.isVegetarian;
+          case 'glutenFree':
+            return food.dietaryInfo.isGlutenFree;
+          case 'dairyFree':
+            return food.dietaryInfo.isDairyFree;
+          default:
+            return true;
+        }
+      });
+    return matchesSearch && matchesGroup && matchesDietary;
+  });
 
-return (
+  return (
     <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white pb-20">
       {!isAuthenticated ? (
         // Login Page
@@ -480,9 +611,7 @@ return (
             </form>
           </div>
         </div>
-      ) : (
-        // Main App
-        <>
+      ) : (<>
           <header className="bg-white shadow-md fixed top-0 left-0 right-0 z-40">
             <div className="max-w-7xl mx-auto px-4 py-4">
               <div className="flex justify-between items-center">
@@ -498,56 +627,6 @@ return (
               </div>
             </div>
           </header>
-
-          {/* Emoji Picker Modal */}
-          {showEmojiPicker && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Select an Emoji</h3>
-                  <button
-                    onClick={() => setShowEmojiPicker(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                {/* Emoji Categories */}
-                <div className="flex overflow-x-auto pb-2 mb-4">
-                  {Object.keys(foodEmojis).map((category) => (
-                    <button
-                      key={category}
-                      onClick={() => setSelectedEmojiCategory(category)}
-                      className={`flex-shrink-0 px-3 py-1 rounded-full mr-2 ${
-                        selectedEmojiCategory === category
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Emoji Grid */}
-                <div className="grid grid-cols-6 gap-2">
-                  {foodEmojis[selectedEmojiCategory].map((emoji, index) => (
-                    <button
-                      key={`${emoji}-${index}`}
-                      onClick={() => {
-                        setNewCustomFood(prev => ({ ...prev, icon: emoji }));
-                        setShowEmojiPicker(false);
-                      }}
-                      className="text-2xl p-2 hover:bg-gray-100 rounded"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="pt-16 pb-16"> {/* Padding for fixed header and bottom nav */}
             {/* Tab Navigation */}
@@ -625,36 +704,90 @@ return (
                       </div>
                     </div>
 
+                    {/* Drag & Drop Zone */}
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleFoodDrop}
+                      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-8 hover:border-blue-500 transition-colors min-h-[200px] flex flex-col items-center justify-center"
+                    >
+                      <p className="text-gray-600 mb-4">Drag foods here to see how they affect your gut health</p>
+                      {/* Added Foods Display */}
+                      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {meterFoods.map((food) => (
+                          <div
+                            key={food.id}
+                            className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-2xl">{food.icon}</span>
+                              <button
+                                onClick={() => removeFood(food.id)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                ×
+                              </button>
+                            </div>
+                            <div className="font-medium">{food.name}</div>
+                            {food.editable && (
+                              <button
+                                onClick={() => editFood(food.id)}
+                                className="text-sm text-blue-500 hover:text-blue-700 mt-2"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Food Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {[...foodItems, ...customFoods].map((food) => (
-                        <button
+                        <div
                           key={food.id}
-                          onClick={() => handleFoodSelect(food)}
-                          className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all text-center"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('foodId', food.id);
+                          }}
+                          className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all cursor-move"
                         >
                           <div className="text-3xl mb-2">{food.icon}</div>
                           <div className="font-medium">{food.name}</div>
                           <div className="text-sm text-gray-600">{food.foodGroup}</div>
-                          <div className="mt-2 flex flex-wrap gap-1 justify-center">
-                            {food.impact === 'positive' && (
-                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                                Beneficial
-                              </span>
-                            )}
-                            {food.impact === 'negative' && (
-                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
-                                Harmful
-                              </span>
-                            )}
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              food.impact === 'positive' ? 'bg-green-100 text-green-800' :
+                              food.impact === 'negative' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {healthImpacts[food.impact].label}
+                            </span>
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
 
                     {/* Add Custom Food Button */}
                     <button
-                      onClick={() => setShowAddCustomFood(true)}
+                      onClick={() => {
+                        setEditingFoodId(null);
+                        setNewCustomFood({
+                          name: '',
+                          category: 'neutral',
+                          icon: '🍽️',
+                          impact: 'neutral',
+                          description: '',
+                          foodGroup: 'Snacks & Others',
+                          dietaryInfo: {
+                            isVegan: false,
+                            isVegetarian: false,
+                            isGlutenFree: false,
+                            isDairyFree: false
+                          }
+                        });
+                        setShowAddCustomFood(true);
+                      }}
                       className="mt-6 w-full py-3 px-4 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-colors"
                     >
                       + Add Custom Food
@@ -675,98 +808,8 @@ return (
                 </div>
               )}
 
-              {/* Custom Food Modal */}
-              {showAddCustomFood && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-semibold">Add Custom Food</h3>
-                      <button
-                        onClick={() => setShowAddCustomFood(false)}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      addCustomFood();
-                    }} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Name</label>
-                        <input
-                          type="text"
-                          value={newCustomFood.name}
-                          onChange={(e) => setNewCustomFood(prev => ({ ...prev, name: e.target.value }))}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                          required
-                        />
-                      </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Food Group</label>
-                        <select
-                          value={newCustomFood.foodGroup}
-                          onChange={(e) => setNewCustomFood(prev => ({ ...prev, foodGroup: e.target.value }))}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                        >
-                          {foodCategories.map((category) => (
-                            <option key={category} value={category}>
-                              {category}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Choose an Emoji</label>
-                        <button
-                          type="button"
-                          onClick={() => setShowEmojiPicker(true)}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-left"
-                        >
-                          {newCustomFood.icon} Select Emoji
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Impact on Gut Health</label>
-                        <select
-                          value={newCustomFood.impact}
-                          onChange={(e) => setNewCustomFood(prev => ({ 
-                            ...prev, 
-                            impact: e.target.value as FoodItem['impact']
-                          }))}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                        >
-                          <option value="positive">Beneficial</option>
-                          <option value="negative">Harmful</option>
-                          <option value="neutral">Neutral</option>
-                        </select>
-                      </div>
-
-                      <div className="flex justify-end space-x-4">
-                        <button
-                          type="button"
-                          onClick={() => setShowAddCustomFood(false)}
-                          className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                        >
-                          Add Food
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-
-      {activeTab === 'planner' && (
+{activeTab === 'planner' && (
                 <div className="space-y-8">
                   {/* Day Navigation */}
                   <div className="flex overflow-x-auto pb-2 -mx-2 px-2">
@@ -809,7 +852,7 @@ return (
                             <div className="min-h-[200px] border-2 border-dashed border-gray-300 rounded-lg p-4">
                               {foods.map((food, index) => (
                                 <div
-                                  key={index}
+                                  key={`${food.id}-${index}`}
                                   className="flex items-center bg-gray-50 rounded p-2 mb-2"
                                 >
                                   <span className="text-2xl mr-2">{food.icon}</span>
@@ -845,8 +888,11 @@ return (
                               name: `${day.day}'s Meals`,
                               description: 'Custom meal plan recipe',
                               foods: dayFoods,
+                              instructions: [],
                               tags: [],
-                              mealType: 'breakfast'
+                              mealType: 'breakfast',
+                              prepTime: '',
+                              servings: 1
                             });
                             setShowRecipeCreator(true);
                           }
@@ -870,8 +916,11 @@ return (
                           name: '',
                           description: '',
                           foods: [],
+                          instructions: [],
                           tags: [],
-                          mealType: 'breakfast'
+                          mealType: 'breakfast',
+                          prepTime: '',
+                          servings: 1
                         });
                         setShowRecipeCreator(true);
                       }}
@@ -897,17 +946,39 @@ return (
                             </span>
                           </div>
                           <p className="text-gray-600 mt-2">{recipe.description}</p>
-                          <div className="flex flex-wrap gap-2 mt-4">
-                            {recipe.foods.map((food, index) => (
-                              <span
-                                key={index}
-                                className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full text-sm"
-                              >
-                                {food.icon} {food.name}
-                              </span>
-                            ))}
+                          
+                          {/* Recipe Details */}
+                          <div className="mt-4 space-y-4">
+                            <div className="flex flex-wrap gap-2">
+                              {recipe.foods.map((food, index) => (
+                                <span
+                                  key={index}
+                                  className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full text-sm"
+                                >
+                                  {food.icon} {food.name}
+                                </span>
+                              ))}
+                            </div>
+                            
+                            {recipe.instructions && recipe.instructions.length > 0 && (
+                              <div className="mt-4">
+                                <h4 className="font-medium text-gray-700 mb-2">Instructions:</h4>
+                                <ol className="list-decimal list-inside space-y-1 text-gray-600 text-sm">
+                                  {recipe.instructions.map((instruction, index) => (
+                                    <li key={index}>{instruction}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+
+                            {recipe.prepTime && (
+                              <div className="text-sm text-gray-600">
+                                Prep Time: {recipe.prepTime}
+                              </div>
+                            )}
                           </div>
                         </div>
+                        
                         <div className="border-t px-6 py-4 bg-gray-50 flex justify-between items-center">
                           <div className="text-sm text-gray-600">
                             By {recipe.createdBy}
@@ -945,76 +1016,7 @@ return (
                 </div>
               )}
 
-              {/* Recipe Creator Modal */}
-              {showRecipeCreator && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-semibold">Create New Recipe</h3>
-                      <button
-                        onClick={() => setShowRecipeCreator(false)}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      createNewRecipe();
-                    }} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Recipe Name</label>
-                        <input
-                          type="text"
-                          value={newRecipe.name}
-                          onChange={(e) => setNewRecipe(prev => ({ ...prev, name: e.target.value }))}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Description</label>
-                        <textarea
-                          value={newRecipe.description}
-                          onChange={(e) => setNewRecipe(prev => ({ ...prev, description: e.target.value }))}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                          rows={3}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Meal Type</label>
-                        <select
-                          value={newRecipe.mealType}
-                          onChange={(e) => setNewRecipe(prev => ({ ...prev, mealType: e.target.value as Recipe['mealType'] }))}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                        >
-                          {mealTypes.map((type) => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex justify-end space-x-4">
-                        <button
-                          type="button"
-                          onClick={() => setShowRecipeCreator(false)}
-                          className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                        >
-                          Create Recipe
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-
-{activeTab === 'profile' && (
+ {activeTab === 'profile' && (
                 <div className="space-y-8">
                   {/* Profile Header */}
                   <div className="bg-white rounded-lg shadow-lg p-6">
@@ -1064,31 +1066,315 @@ return (
                       <p className="text-gray-600">No saved recipes yet. Explore the community recipes to find some!</p>
                     )}
                   </div>
-
-                  {/* Health Progress */}
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <h3 className="text-xl font-semibold mb-4">Health Progress</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <span className="text-gray-600">Overall Gut Health</span>
-                          <span className={getHealthColor()}>{gutHealth}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all duration-500 ${
-                              gutHealth > 70 ? 'bg-green-500' : gutHealth > 40 ? 'bg-yellow-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${gutHealth}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
           </div>
+
+          {/* Food Selector Modal */}
+          {showFoodSelector && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">Add Food</h3>
+                  <button
+                    onClick={() => setShowFoodSelector(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* Search and Filters */}
+                <div className="mb-6 space-y-4">
+                  <input
+                    type="text"
+                    placeholder="Search foods..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {foodCategories.map((category) => (
+                      <button
+                        key={category}
+                        onClick={() => setSelectedFoodGroup(category)}
+                        className={`px-3 py-1 rounded-full ${
+                          selectedFoodGroup === category
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Food Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {filteredFoods.map((food) => (
+                    <button
+                      key={food.id}
+                      onClick={() => addFoodToMeal(food)}
+                      className="p-4 rounded-lg border hover:border-blue-500 transition-all text-center"
+                    >
+                      <div className="text-3xl mb-2">{food.icon}</div>
+                      <div className="font-medium">{food.name}</div>
+                      <div className="text-sm text-gray-600">{food.foodGroup}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Custom Food Modal with Emoji Picker */}
+          {showAddCustomFood && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">
+                    {editingFoodId ? 'Edit Food' : 'Add Custom Food'}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowAddCustomFood(false);
+                      setEditingFoodId(null);
+                    }}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (editingFoodId) {
+                    updateFood(newCustomFood as FoodItem);
+                  } else {
+                    addCustomFood();
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Name</label>
+                    <input
+                      type="text"
+                      value={newCustomFood.name}
+                      onChange={(e) => setNewCustomFood(prev => ({ ...prev, name: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Choose an Emoji</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(true)}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-left"
+                    >
+                      {newCustomFood.icon} Select Emoji
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Food Group</label>
+                    <select
+                      value={newCustomFood.foodGroup}
+                      onChange={(e) => setNewCustomFood(prev => ({ ...prev, foodGroup: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                    >
+                      {foodCategories.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Impact on Gut Health</label>
+                    <select
+                      value={newCustomFood.impact}
+                      onChange={(e) => setNewCustomFood(prev => ({ 
+                        ...prev, 
+                        impact: e.target.value as FoodItem['impact']
+                      }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                    >
+                      <option value="positive">Beneficial</option>
+                      <option value="negative">Harmful</option>
+                      <option value="neutral">Neutral</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCustomFood(false);
+                        setEditingFoodId(null);
+                      }}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      {editingFoodId ? 'Update Food' : 'Add Food'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Emoji Picker Modal */}
+          {showEmojiPicker && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Select an Emoji</h3>
+                  <button
+                    onClick={() => setShowEmojiPicker(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                {/* Emoji Categories */}
+                <div className="flex overflow-x-auto pb-2 mb-4">
+                  {Object.keys(foodEmojis).map((category) => (
+                    <button
+                      key={category}
+                      onClick={() => setSelectedEmojiCategory(category)}
+                      className={`flex-shrink-0 px-3 py-1 rounded-full mr-2 ${
+                        selectedEmojiCategory === category
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Emoji Grid */}
+                <div className="grid grid-cols-6 gap-2">
+                  {foodEmojis[selectedEmojiCategory].map((emoji, index) => (
+                    <button
+                      key={`${emoji}-${index}`}
+                      onClick={() => {
+                        setNewCustomFood(prev => ({ ...prev, icon: emoji }));
+                        setShowEmojiPicker(false);
+                      }}
+                      className="text-2xl p-2 hover:bg-gray-100 rounded"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recipe Creator Modal */}
+          {showRecipeCreator && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold">Create New Recipe</h3>
+                  <button
+                    onClick={() => setShowRecipeCreator(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+                </div>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  createNewRecipe();
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Recipe Name</label>
+                    <input
+                      type="text"
+                      value={newRecipe.name}
+                      onChange={(e) => setNewRecipe(prev => ({ ...prev, name: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea
+                      value={newRecipe.description}
+                      onChange={(e) => setNewRecipe(prev => ({ ...prev, description: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Instructions</label>
+                    <textarea
+                      value={newRecipe.instructions?.join('\n')}
+                      onChange={(e) => setNewRecipe(prev => ({ 
+                        ...prev, 
+                        instructions: e.target.value.split('\n').filter(line => line.trim())
+                      }))}
+                      placeholder="Enter each instruction on a new line"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                      rows={5}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Prep Time</label>
+                      <input
+                        type="text"
+                        value={newRecipe.prepTime}
+                        onChange={(e) => setNewRecipe(prev => ({ ...prev, prepTime: e.target.value }))}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="e.g., 15 minutes"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Servings</label>
+                      <input
+                        type="number"
+                        value={newRecipe.servings}
+                        onChange={(e) => setNewRecipe(prev => ({ 
+                          ...prev, 
+                          servings: parseInt(e.target.value) || 1
+                        }))}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowRecipeCreator(false)}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      Create Recipe
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* Mobile Navigation */}
           <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
@@ -1136,7 +1422,3 @@ return (
     </main>
   );
 }
-
-
-
-
