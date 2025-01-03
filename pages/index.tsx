@@ -1,11 +1,40 @@
+
 import { useState, useEffect, DragEvent } from 'react';
 
-interface UserProfile {
-  username: string;
-  favoriteRecipes: Recipe[];
-  healthScore: number;
-  following: string[];
-  followers: string[];
+// Language support
+type SupportedLanguage = 'en' | 'es' | 'zh' | 'hi' | 'ar';
+
+interface LanguageContent {
+  [key: string]: {
+    [key: string]: string;
+  };
+}
+
+interface Nutrient {
+  name: string;
+  amount: number;
+  unit: string;
+  dailyValue: number;
+  category: 'macronutrient' | 'vitamin' | 'mineral' | 'other';
+}
+
+interface MicrobeInfo {
+  name: string;
+  type: 'beneficial' | 'harmful' | 'neutral';
+  description: string;
+  effects: string[];
+  population: number; // Represents relative abundance
+  studies: StudyReference[];
+}
+
+interface StudyReference {
+  title: string;
+  authors: string[];
+  journal: string;
+  year: number;
+  doi: string;
+  url: string;
+  findings: string;
 }
 
 interface FoodItem {
@@ -16,15 +45,54 @@ interface FoodItem {
   impact: 'positive' | 'negative' | 'neutral';
   description: string;
   foodGroup: string;
+  nutrients: Nutrient[];
+  microbes: MicrobeInfo[];
+  culturalInfo: {
+    origins: string[];
+    traditions: string[];
+    alternatives: string[];
+  };
   dietaryInfo: {
     isVegan: boolean;
     isVegetarian: boolean;
     isGlutenFree: boolean;
     isDairyFree: boolean;
+    isHalal: boolean;
+    isKosher: boolean;
   };
+  studies: StudyReference[];
   customFood?: boolean;
   createdBy?: string;
   editable?: boolean;
+}
+
+interface HealthTrend {
+  date: string;
+  gutHealth: number;
+  microbiomeBalance: number;
+  nutrientLevels: {
+    [key: string]: number;
+  };
+  symptoms: string[];
+}
+
+interface Quiz {
+  id: string;
+  level: 'beginner' | 'intermediate' | 'advanced';
+  topic: string;
+  questions: QuizQuestion[];
+  requiredScore: number;
+  studyMaterials: StudyReference[];
+}
+
+interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  relatedStudies: StudyReference[];
 }
 
 interface Recipe {
@@ -35,13 +103,38 @@ interface Recipe {
   description: string;
   instructions: string[];
   healthScore: number;
+  nutrientProfile: Nutrient[];
+  microbiomeImpact: MicrobeInfo[];
+  culturalOrigin: string;
+  dietaryCategories: string[];
   likes: number;
   likedBy: string[];
   tags: string[];
   createdAt: string;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
-  prepTime?: string;
-  servings?: number;
+  prepTime: string;
+  servings: number;
+  studies: StudyReference[];
+}
+
+interface UserProfile {
+  username: string;
+  favoriteRecipes: Recipe[];
+  healthScore: number;
+  healthTrends: HealthTrend[];
+  completedQuizzes: {
+    quizId: string;
+    score: number;
+    date: string;
+  }[];
+  dietaryPreferences: {
+    restrictions: string[];
+    culturalPreferences: string[];
+    allergies: string[];
+  };
+  language: SupportedLanguage;
+  following: string[];
+  followers: string[];
 }
 
 interface MealPlan {
@@ -53,58 +146,124 @@ interface MealPlan {
     snacks: FoodItem[];
   };
   healthScore: number;
+  totalNutrients: Nutrient[];
+  microbiomeImpact: MicrobeInfo[];
 }
 
 type MealType = keyof MealPlan['meals'];
 
-// Food emoji mapping with categories
-const foodEmojis: { [key: string]: string[] } = {
-  'Fruits': ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🍑', '🥝', '🍍', '🥭'],
-  'Vegetables': ['🥬', '🥦', '🥒', '🌶️', '🫑', '🥕', '🧅', '🧄', '🍆', '🥔', '🥑', '🍅'],
-  'Proteins': ['🥩', '🍗', '🍖', '🍣', '🍤', '🥚', '🫘', '🥜'],
-  'Dairy': ['🥛', '🧀', '🫕', '🧈', '🍦'],
-  'Grains': ['🍚', '🍜', '🥖', '🥨', '🥯', '🥞', '🧇'],
-  'Fermented': ['🫖', '🥬'],
-  'Other': ['🍯', '🥫', '🍪', '🍩']
-};
 
-const foodCategories = [
-  'All',
-  'Fruits & Vegetables',
-  'Proteins',
-  'Grains',
-  'Dairy & Alternatives',
-  'Fermented Foods',
-  'Snacks & Others'
-] as const;
 
-const dietaryFilters = [
-  { id: 'vegan', label: 'Vegan' },
-  { id: 'vegetarian', label: 'Vegetarian' },
-  { id: 'glutenFree', label: 'Gluten Free' },
-  { id: 'dairyFree', label: 'Dairy Free' }
-];
 
-const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
-const healthImpacts = {
-  positive: {
-    label: 'Beneficial',
-    color: 'green',
-    description: 'Supports gut health'
+
+const languageContent: LanguageContent = {
+  en: {
+    appName: 'Gut Health Explorer',
+    welcome: 'Track, learn, and improve your gut health',
+    lowNutrient: 'Low in {nutrient}',
+    nutrientSuggestion: 'Try adding foods rich in {nutrient} to your diet',
+    // Add more translations
   },
-  negative: {
-    label: 'Harmful',
-    color: 'red',
-    description: 'May disrupt gut balance'
+  es: {
+    appName: 'Explorador de Salud Digestiva',
+    welcome: 'Monitorea, aprende y mejora tu salud digestiva',
+    lowNutrient: 'Bajo en {nutrient}',
+    nutrientSuggestion: 'Intenta agregar alimentos ricos en {nutrient} a tu dieta',
+    // Add more translations
   },
-  neutral: {
-    label: 'Neutral',
-    color: 'gray',
-    description: 'No significant impact'
+  zh: {
+    appName: '肠道健康探索器',
+    welcome: '追踪、学习并改善肠道健康',
+    lowNutrient: '{nutrient}含量低',
+    nutrientSuggestion: '尝试添加富含{nutrient}的食物',
+    // Add more translations
+  },
+  hi: {
+    appName: 'पाचन स्वास्थ्य अन्वेषक',
+    welcome: 'अपने पाचन स्वास्थ्य को ट्रैक करें, सीखें और सुधारें',
+    lowNutrient: '{nutrient} की कमी',
+    nutrientSuggestion: 'अपने आहार में {nutrient} युक्त खाद्य पदार्थ शामिल करें',
+    // Add more translations
+  },
+  ar: {
+    appName: 'مستكشف صحة الأمعاء',
+    welcome: 'تتبع وتعلم وحسن صحة أمعائك',
+    lowNutrient: 'منخفض في {nutrient}',
+    nutrientSuggestion: 'حاول إضافة أطعمة غنية بـ {nutrient} إلى نظامك الغذائي',
+    // Add more translations
   }
 };
 
+
+// Scientific studies database
+const scientificStudies: StudyReference[] = [
+  {
+    title: 'The Role of Gut Microbiota in Immune Homeostasis and Autoimmunity',
+    authors: ['Wu, H.J.', 'Wu, E.'],
+    journal: 'Gut Microbes',
+    year: 2012,
+    doi: '10.4161/gmic.19320',
+    url: 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3337124/',
+    findings: 'Demonstrates the crucial role of gut microbiota in maintaining immune system balance.'
+  },
+  {
+    title: 'Gut microbiome and its role in obesity and insulin resistance',
+    authors: ['Mazidi, M.', 'Rezaie, P.', 'Kengne, A.P.', 'Mobarhan, M.G.', 'Ferns, G.A.'],
+    journal: 'Journal of Cellular Physiology',
+    year: 2016,
+    doi: '10.1002/jcp.25518',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/27459855/',
+    findings: 'Links gut microbiome composition to metabolic health outcomes.'
+  }
+];
+
+// Microbiome information
+const microbeDatabase: MicrobeInfo[] = [
+  {
+    name: 'Lactobacillus acidophilus',
+    type: 'beneficial',
+    description: 'Common probiotic bacteria that helps maintain gut barrier function',
+    effects: [
+      'Improves digestion',
+      'Enhances immune function',
+      'Produces vitamin K and B vitamins'
+    ],
+    population: 0.8,
+    studies: [scientificStudies[0]]
+  },
+  {
+    name: 'Bifidobacterium longum',
+    type: 'beneficial',
+    description: 'Helps maintain gut health and boost immune system',
+    effects: [
+      'Reduces inflammation',
+      'Improves gut barrier function',
+      'Helps digest complex carbohydrates'
+    ],
+    population: 0.9,
+    studies: [scientificStudies[1]]
+  }
+];
+
+// Cultural food information
+const culturalFoodData = {
+  asian: {
+    fermented: ['Kimchi', 'Miso', 'Natto'],
+    probiotic: ['Kombucha', 'Pickled vegetables'],
+    traditional: ['Green tea', 'Seaweed']
+  },
+  mediterranean: {
+    fermented: ['Yogurt', 'Olives'],
+    probiotic: ['Kefir', 'Pickled vegetables'],
+    traditional: ['Olive oil', 'Fish']
+  },
+  indian: {
+    fermented: ['Lassi', 'Dosa'],
+    probiotic: ['Buttermilk', 'Pickled vegetables'],
+    traditional: ['Turmeric', 'Ginger']
+  }
+};
 
 const foodItems: FoodItem[] = [
   {
@@ -115,12 +274,37 @@ const foodItems: FoodItem[] = [
     impact: 'positive',
     description: 'Rich in probiotics and protein, supports digestive health',
     foodGroup: 'Dairy & Alternatives',
+    nutrients: [
+      {
+        name: 'Protein',
+        amount: 15,
+        unit: 'g',
+        dailyValue: 30,
+        category: 'macronutrient'
+      },
+      {
+        name: 'Calcium',
+        amount: 200,
+        unit: 'mg',
+        dailyValue: 20,
+        category: 'mineral'
+      }
+    ],
+    microbes: [microbeDatabase[0]],
+    culturalInfo: {
+      origins: ['Mediterranean', 'Middle Eastern'],
+      traditions: ['Traditional breakfast food', 'Used in marinades'],
+      alternatives: ['Coconut yogurt', 'Almond yogurt']
+    },
     dietaryInfo: {
       isVegan: false,
       isVegetarian: true,
       isGlutenFree: true,
-      isDairyFree: false
-    }
+      isDairyFree: false,
+      isHalal: true,
+      isKosher: true
+    },
+    studies: [scientificStudies[0]]
   },
   {
     id: '2',
@@ -128,266 +312,197 @@ const foodItems: FoodItem[] = [
     category: 'probiotic',
     icon: '🥬',
     impact: 'positive',
-    description: 'Fermented vegetables rich in beneficial bacteria',
+    description: 'Traditional Korean fermented vegetables rich in probiotics',
     foodGroup: 'Fermented Foods',
+    nutrients: [
+      {
+        name: 'Vitamin C',
+        amount: 18,
+        unit: 'mg',
+        dailyValue: 20,
+        category: 'vitamin'
+      },
+      {
+        name: 'Fiber',
+        amount: 2.4,
+        unit: 'g',
+        dailyValue: 10,
+        category: 'macronutrient'
+      }
+    ],
+    microbes: [microbeDatabase[0], microbeDatabase[1]],
+    culturalInfo: {
+      origins: ['Korean'],
+      traditions: ['Daily staple', 'Traditional fermentation process'],
+      alternatives: ['Sauerkraut', 'Pickled vegetables']
+    },
     dietaryInfo: {
       isVegan: true,
       isVegetarian: true,
       isGlutenFree: true,
-      isDairyFree: true
-    }
-  },
-  {
-    id: '3',
-    name: 'Kombucha',
-    category: 'probiotic',
-    icon: '🫖',
-    impact: 'positive',
-    description: 'Fermented tea with probiotics and antioxidants',
-    foodGroup: 'Fermented Foods',
-    dietaryInfo: {
-      isVegan: true,
-      isVegetarian: true,
-      isGlutenFree: true,
-      isDairyFree: true
-    }
-  },
-  {
-    id: '4',
-    name: 'Sauerkraut',
-    category: 'probiotic',
-    icon: '🥬',
-    impact: 'positive',
-    description: 'Fermented cabbage rich in probiotics',
-    foodGroup: 'Fermented Foods',
-    dietaryInfo: {
-      isVegan: true,
-      isVegetarian: true,
-      isGlutenFree: true,
-      isDairyFree: true
-    }
-  },
-  {
-    id: '5',
-    name: 'Sweet Potato',
-    category: 'prebiotic',
-    icon: '🍠',
-    impact: 'positive',
-    description: 'Rich in fiber that feeds beneficial gut bacteria',
-    foodGroup: 'Fruits & Vegetables',
-    dietaryInfo: {
-      isVegan: true,
-      isVegetarian: true,
-      isGlutenFree: true,
-      isDairyFree: true
-    }
-  },
-  {
-    id: '6',
-    name: 'Processed Sugar',
-    category: 'inflammatory',
-    icon: '🍬',
-    impact: 'negative',
-    description: 'Can disrupt gut bacterial balance and promote inflammation',
-    foodGroup: 'Snacks & Others',
-    dietaryInfo: {
-      isVegan: true,
-      isVegetarian: true,
-      isGlutenFree: true,
-      isDairyFree: true
-    }
+      isDairyFree: true,
+      isHalal: true,
+      isKosher: true
+    },
+    studies: [scientificStudies[1]]
   }
 ];
 
-const sampleRecipes: Recipe[] = [
+// Quiz data with difficulty levels
+const quizzes: Quiz[] = [
   {
-    id: '1',
-    name: 'Probiotic Power Bowl',
-    createdBy: 'system',
-    foods: [
-      { ...foodItems[0], id: 'recipe-1-food-1' }, // Greek Yogurt
-      { ...foodItems[1], id: 'recipe-1-food-2' }, // Kimchi
-      { ...foodItems[4], id: 'recipe-1-food-3' }  // Sweet Potato
+    id: 'basics-1',
+    level: 'beginner',
+    topic: 'Gut Health Basics',
+    questions: [
+      {
+        id: 'q1',
+        question: 'What percentage of your immune system is located in your gut?',
+        options: ['30%', '50%', '70%', '90%'],
+        correctAnswer: 2,
+        explanation: 'About 70% of your immune system is located in your gut, making it crucial for overall health.',
+        difficulty: 'easy',
+        relatedStudies: [scientificStudies[0]]
+      }
     ],
-    description: 'A gut-healthy breakfast bowl packed with probiotics and fiber',
-    instructions: [
-      'Start with a base of Greek yogurt',
-      'Add diced sweet potato (cooked and cooled)',
-      'Top with kimchi',
-      'Optional: add a drizzle of honey for sweetness'
-    ],
-    healthScore: 90,
-    likes: 24,
-    likedBy: [],
-    tags: ['breakfast', 'probiotic', 'high-protein'],
-    createdAt: new Date().toISOString(),
-    mealType: 'breakfast',
-    prepTime: '10 minutes',
-    servings: 1
+    requiredScore: 70,
+    studyMaterials: [scientificStudies[0]]
   },
   {
-    id: '2',
-    name: 'Fermented Feast Bowl',
-    createdBy: 'system',
-    foods: [
-      { ...foodItems[1], id: 'recipe-2-food-1' }, // Kimchi
-      { ...foodItems[3], id: 'recipe-2-food-2' }, // Sauerkraut
-      { ...foodItems[2], id: 'recipe-2-food-3' }  // Kombucha
+    id: 'advanced-1',
+    level: 'advanced',
+    topic: 'Microbiome Interactions',
+    questions: [
+      {
+        id: 'q2',
+        question: 'Which metabolites produced by gut bacteria are essential for brain function?',
+        options: [
+          'Short-chain fatty acids',
+          'Amino acids',
+          'Neurotransmitters',
+          'All of the above'
+        ],
+        correctAnswer: 3,
+        explanation: 'Gut bacteria produce various compounds including SCFAs, amino acids, and neurotransmitters that influence brain function.',
+        difficulty: 'hard',
+        relatedStudies: [scientificStudies[1]]
+      }
     ],
-    description: 'A powerful combination of fermented foods for optimal gut health',
-    instructions: [
-      'Combine kimchi and sauerkraut in a bowl',
-      'Serve with a glass of kombucha',
-      'Optional: add brown rice for a complete meal'
-    ],
-    healthScore: 95,
-    likes: 18,
-    likedBy: [],
-    tags: ['lunch', 'probiotic', 'fermented'],
-    createdAt: new Date().toISOString(),
-    mealType: 'lunch',
-    prepTime: '5 minutes',
-    servings: 1
+    requiredScore: 80,
+    studyMaterials: [scientificStudies[1]]
   }
 ];
 
-const quizQuestions = [
-  {
-    question: 'What percentage of your immune system is located in your gut?',
-    options: ['30%', '50%', '70%', '90%'],
-    correctAnswer: 2,
-    explanation: 'About 70% of your immune system is located in your gut, making it crucial for overall health.'
-  },
-  {
-    question: 'Which of these bacteria is essential for vitamin K production?',
-    options: ['Lactobacillus', 'Bifidobacterium', 'Escherichia coli', 'None of these'],
-    correctAnswer: 0,
-    explanation: 'Lactobacillus helps produce vitamin K, which is important for blood clotting and bone health.'
-  },
-  {
-    question: 'Where is most of the bacterial fermentation process completed?',
-    options: ['Stomach', 'Small Intestine', 'Large Intestine', 'Esophagus'],
-    correctAnswer: 2,
-    explanation: 'The large intestine is where most bacterial fermentation occurs, producing beneficial compounds.'
-  }
-];
-
-const symptoms = [
-  'Bloating',
-  'Digestive Discomfort',
-  'Changes in Appetite',
-  'Fatigue',
-  'Mood Changes'
-];
 
 
 export default function Home() {
-  // Authentication states
+  // Core states
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     username: '',
     favoriteRecipes: [],
     healthScore: 70,
+    healthTrends: [],
+    completedQuizzes: [],
+    dietaryPreferences: {
+      restrictions: [],
+      culturalPreferences: [],
+      allergies: []
+    },
+    language: 'en',
     following: [],
     followers: []
   });
 
-  // Core app states
-  const [activeTab, setActiveTab] = useState<'meter' | 'planner' | 'social' | 'profile'>('meter');
+  // Language and accessibility
+  const [currentLanguage, setCurrentLanguage] = useState<SupportedLanguage>('en');
+  
+  // UI states
+  const [activeTab, setActiveTab] = useState<'meter' | 'planner' | 'social' | 'profile' | 'learn'>('meter');
+  const [activeSection, setActiveSection] = useState<'main' | 'microbiome' | 'nutrients' | 'studies'>('main');
+  
+  // Health tracking states
   const [gutHealth, setGutHealth] = useState<number>(70);
+  const [microbiomeBalance, setMicrobiomeBalance] = useState<number>(50);
   const [recentReactions, setRecentReactions] = useState<string[]>([]);
+  const [healthTrends, setHealthTrends] = useState<HealthTrend[]>([]);
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
   const [meterFoods, setMeterFoods] = useState<FoodItem[]>([]);
+
+  // Learning states
+  const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
+  const [quizProgress, setQuizProgress] = useState<{
+    currentQuestion: number;
+    score: number;
+    answers: number[];
+  }>({
+    currentQuestion: 0,
+    score: 0,
+    answers: []
+  });
+  const [showStudyMaterial, setShowStudyMaterial] = useState<boolean>(false);
+  const [selectedStudy, setSelectedStudy] = useState<StudyReference | null>(null);
 
   // Food and recipe states
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedFoodGroup, setSelectedFoodGroup] = useState<string>('All');
   const [selectedDietaryFilters, setSelectedDietaryFilters] = useState<string[]>([]);
+  const [selectedCulturalPreferences, setSelectedCulturalPreferences] = useState<string[]>([]);
   const [customFoods, setCustomFoods] = useState<FoodItem[]>([]);
   const [showAddCustomFood, setShowAddCustomFood] = useState<boolean>(false);
   const [showFoodSelector, setShowFoodSelector] = useState<boolean>(false);
-  const [recipes, setRecipes] = useState<Recipe[]>(sampleRecipes);
-  const [showRecipeCreator, setShowRecipeCreator] = useState<boolean>(false);
-  const [selectedEmojis, setSelectedEmojis] = useState<string[]>([]);
-  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
-  const [selectedEmojiCategory, setSelectedEmojiCategory] = useState<string>('Fruits');
-  const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
+  const [showMicrobiomeView, setShowMicrobiomeView] = useState<boolean>(false);
+  const [showNutrientAnalysis, setShowNutrientAnalysis] = useState<boolean>(false);
 
-  // New recipe creation states
-  const [newRecipe, setNewRecipe] = useState<Partial<Recipe>>({
-    name: '',
-    description: '',
-    foods: [],
-    instructions: [],
-    tags: [],
-    mealType: 'breakfast',
-    prepTime: '',
-    servings: 1
+  // Microbiome visualization states
+  const [selectedMicrobe, setSelectedMicrobe] = useState<MicrobeInfo | null>(null);
+  const [microbiomeData, setMicrobiomeData] = useState<{
+    beneficial: number;
+    harmful: number;
+    neutral: number;
+  }>({
+    beneficial: 70,
+    harmful: 10,
+    neutral: 20
   });
 
-  // Meal planning states
-  const [selectedDay, setSelectedDay] = useState<string>('Monday');
-  const [selectedMealType, setSelectedMealType] = useState<string>('');
-  const [mealPlan, setMealPlan] = useState<MealPlan[]>([
-    {
-      day: 'Monday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    },
-    {
-      day: 'Tuesday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    },
-    {
-      day: 'Wednesday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    },
-    {
-      day: 'Thursday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    },
-    {
-      day: 'Friday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    },
-    {
-      day: 'Saturday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    },
-    {
-      day: 'Sunday',
-      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
-      healthScore: 0
-    }
-  ]);
-
-  // Custom food states
-  const [newCustomFood, setNewCustomFood] = useState<Partial<FoodItem>>({
-    name: '',
-    category: 'neutral',
-    icon: '🍽️',
-    impact: 'neutral',
-    description: '',
-    foodGroup: 'Snacks & Others',
-    dietaryInfo: {
-      isVegan: false,
-      isVegetarian: false,
-      isGlutenFree: false,
-      isDairyFree: false
-    }
-  });
+  // Nutrient tracking states
+  const [dailyNutrients, setDailyNutrients] = useState<Nutrient[]>([]);
+  const [nutrientGoals, setNutrientGoals] = useState<{[key: string]: number}>({});
 
   // Handler Functions
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (userProfile.username.trim()) {
-      setIsAuthenticated(true);
-    }
+  const updateMicrobiomeBalance = (newFoods: FoodItem[]) => {
+    const beneficialCount = newFoods.filter(f => 
+      f.microbes.some(m => m.type === 'beneficial')).length;
+    const harmfulCount = newFoods.filter(f => 
+      f.microbes.some(m => m.type === 'harmful')).length;
+    
+    const totalFoods = newFoods.length || 1;
+    const newBalance = Math.min(
+      Math.max(
+        ((beneficialCount - harmfulCount) / totalFoods) * 100 + 50,
+        0
+      ),
+      100
+    );
+    
+    setMicrobiomeBalance(newBalance);
+    updateHealthTrends();
+  };
+
+  const updateNutrientProfile = (foods: FoodItem[]) => {
+    const nutrients: { [key: string]: Nutrient } = {};
+    
+    foods.forEach(food => {
+      food.nutrients.forEach(nutrient => {
+        if (!nutrients[nutrient.name]) {
+          nutrients[nutrient.name] = { ...nutrient, amount: 0 };
+        }
+        nutrients[nutrient.name].amount += nutrient.amount;
+      });
+    });
+
+    setDailyNutrients(Object.values(nutrients));
   };
 
   const handleFoodDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -396,157 +511,105 @@ export default function Home() {
     const food = [...foodItems, ...customFoods].find(f => f.id === foodId);
     if (food) {
       const newFood = { ...food, id: `meter-${Date.now()}`, editable: true };
-      setMeterFoods(prev => [...prev, newFood]);
+      const newFoods = [...meterFoods, newFood];
+      setMeterFoods(newFoods);
       updateGutHealth(newFood.impact);
+      updateMicrobiomeBalance(newFoods);
+      updateNutrientProfile(newFoods);
     }
   };
 
   const updateGutHealth = (impact: 'positive' | 'negative' | 'neutral') => {
     const healthChange = impact === 'positive' ? 5 : impact === 'negative' ? -5 : 0;
-    setGutHealth(prev => Math.min(Math.max(prev + healthChange, 0), 100));
+    setGutHealth(prev => {
+      const newHealth = Math.min(Math.max(prev + healthChange, 0), 100);
+      return newHealth;
+    });
   };
 
-  const handleFoodSelect = (food: FoodItem) => {
-    setSelectedFood(food);
-    const healthChange = food.impact === 'positive' ? 5 : food.impact === 'negative' ? -5 : 0;
-    const newHealth = Math.min(Math.max(gutHealth + healthChange, 0), 100);
-    setGutHealth(newHealth);
-    setRecentReactions(prev => [
-      `${food.icon} ${food.name}`,
-      ...prev.slice(0, 4)
-    ]);
+  const updateHealthTrends = () => {
+    const newTrend: HealthTrend = {
+      date: new Date().toISOString(),
+      gutHealth,
+      microbiomeBalance,
+      nutrientLevels: dailyNutrients.reduce((acc, nutrient) => ({
+        ...acc,
+        [nutrient.name]: nutrient.amount
+      }), {}),
+      symptoms: []
+    };
+
+    setHealthTrends(prev => [...prev, newTrend]);
   };
 
-  const addCustomFood = () => {
-    if (newCustomFood.name) {
-      const customFood: FoodItem = {
-        ...newCustomFood as FoodItem,
-        id: `custom-${Date.now()}`,
-        customFood: true,
-        createdBy: userProfile.username,
-        editable: true
-      };
-      setCustomFoods(prev => [...prev, customFood]);
-      setShowAddCustomFood(false);
-      setNewCustomFood({
-        name: '',
-        category: 'neutral',
-        icon: '🍽️',
-        impact: 'neutral',
-        description: '',
-        foodGroup: 'Snacks & Others',
-        dietaryInfo: {
-          isVegan: false,
-          isVegetarian: false,
-          isGlutenFree: false,
-          isDairyFree: false
-        }
+  const startQuiz = (difficulty: 'beginner' | 'intermediate' | 'advanced') => {
+    const availableQuizzes = quizzes.filter(q => q.level === difficulty);
+    if (availableQuizzes.length > 0) {
+      const randomQuiz = availableQuizzes[Math.floor(Math.random() * availableQuizzes.length)];
+      setCurrentQuiz(randomQuiz);
+      setQuizProgress({
+        currentQuestion: 0,
+        score: 0,
+        answers: []
       });
     }
   };
 
-  const editFood = (foodId: string) => {
-    const food = meterFoods.find(f => f.id === foodId);
-    if (food && food.editable) {
-      setEditingFoodId(foodId);
-      setNewCustomFood(food);
-      setShowAddCustomFood(true);
-    }
-  };
+  const handleQuizAnswer = (answerIndex: number) => {
+    if (!currentQuiz) return;
 
-  const updateFood = (updatedFood: FoodItem) => {
-    if (editingFoodId) {
-      setMeterFoods(prev => 
-        prev.map(food => 
-          food.id === editingFoodId ? { ...updatedFood, id: editingFoodId } : food
-        )
-      );
-      setEditingFoodId(null);
-    }
-  };
+    const isCorrect = currentQuiz.questions[quizProgress.currentQuestion].correctAnswer === answerIndex;
+    const newScore = isCorrect ? quizProgress.score + 1 : quizProgress.score;
+    const newAnswers = [...quizProgress.answers, answerIndex];
 
-  const removeFood = (foodId: string) => {
-    const food = meterFoods.find(f => f.id === foodId);
-    if (food) {
-      updateGutHealth(food.impact === 'positive' ? 'negative' : food.impact === 'negative' ? 'positive' : 'neutral');
-      setMeterFoods(prev => prev.filter(f => f.id !== foodId));
-    }
-  };
-
-
-// More Handler Functions
-  const createNewRecipe = () => {
-    if (newRecipe.name && newRecipe.foods?.length) {
-      const recipe: Recipe = {
-        ...newRecipe as Recipe,
-        id: `recipe-${Date.now()}`,
-        createdBy: userProfile.username,
-        likes: 0,
-        likedBy: [],
-        healthScore: calculateRecipeHealthScore(newRecipe.foods || []),
-        createdAt: new Date().toISOString()
-      };
-      setRecipes(prev => [recipe, ...prev]);
-      setNewRecipe({
-        name: '',
-        description: '',
-        foods: [],
-        instructions: [],
-        tags: [],
-        mealType: 'breakfast',
-        prepTime: '',
-        servings: 1
+    if (quizProgress.currentQuestion + 1 < currentQuiz.questions.length) {
+      setQuizProgress({
+        currentQuestion: quizProgress.currentQuestion + 1,
+        score: newScore,
+        answers: newAnswers
       });
-      setShowRecipeCreator(false);
-    }
-  };
-
-  const calculateRecipeHealthScore = (foods: FoodItem[]): number => {
-    const positiveCount = foods.filter(f => f.impact === 'positive').length;
-    const negativeCount = foods.filter(f => f.impact === 'negative').length;
-    return Math.min(Math.max(
-      Math.round((positiveCount / foods.length) * 100 - (negativeCount / foods.length) * 30),
-      0
-    ), 100);
-  };
-
-  const toggleRecipeLike = (recipeId: string) => {
-    setRecipes(prev => prev.map(recipe => {
-      if (recipe.id === recipeId) {
-        const isLiked = recipe.likedBy.includes(userProfile.username);
-        return {
-          ...recipe,
-          likes: isLiked ? recipe.likes - 1 : recipe.likes + 1,
-          likedBy: isLiked 
-            ? recipe.likedBy.filter(user => user !== userProfile.username)
-            : [...recipe.likedBy, userProfile.username]
-        };
+    } else {
+      // Quiz completed
+      const finalScore = (newScore / currentQuiz.questions.length) * 100;
+      if (finalScore >= currentQuiz.requiredScore) {
+        setUserProfile(prev => ({
+          ...prev,
+          completedQuizzes: [
+            ...prev.completedQuizzes,
+            {
+              quizId: currentQuiz.id,
+              score: finalScore,
+              date: new Date().toISOString()
+            }
+          ]
+        }));
       }
-      return recipe;
-    }));
-  };
-
-  const saveRecipe = (recipe: Recipe) => {
-    if (!userProfile.favoriteRecipes.find(r => r.id === recipe.id)) {
-      setUserProfile(prev => ({
-        ...prev,
-        favoriteRecipes: [...prev.favoriteRecipes, recipe]
-      }));
+      setShowStudyMaterial(true);
     }
   };
 
-  const addFoodToMeal = (food: FoodItem) => {
-    const newMealPlan = [...mealPlan];
-    const dayIndex = newMealPlan.findIndex(d => d.day === selectedDay);
-    if (dayIndex !== -1 && selectedMealType) {
-      const mealTypeKey = selectedMealType.toLowerCase() as MealType;
-      newMealPlan[dayIndex].meals[mealTypeKey].push({
-        ...food,
-        id: `meal-${Date.now()}-${Math.random()}`
-      });
-      setMealPlan(newMealPlan);
-      setShowFoodSelector(false);
-    }
+
+
+  // More Handler Functions
+  const calculateNutrientScore = (nutrients: Nutrient[]): number => {
+    const essentialNutrients = ['Protein', 'Fiber', 'Vitamin C', 'Calcium', 'Iron'];
+    let score = 0;
+    
+    essentialNutrients.forEach(nutrient => {
+      const found = nutrients.find(n => n.name === nutrient);
+      if (found && found.dailyValue >= 20) {
+        score += 20;
+      }
+    });
+    
+    return Math.min(score, 100);
+  };
+
+  const getMicrobiomeStatus = (): string => {
+    if (microbiomeBalance > 70) return 'Excellent';
+    if (microbiomeBalance > 50) return 'Good';
+    if (microbiomeBalance > 30) return 'Fair';
+    return 'Needs Improvement';
   };
 
   const getHealthColor = () => {
@@ -555,42 +618,56 @@ export default function Home() {
     return 'text-red-500';
   };
 
-  // Filter functions
-  const filteredFoods = [...foodItems, ...customFoods].filter(food => {
-    const matchesSearch = food.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesGroup = selectedFoodGroup === 'All' || food.foodGroup === selectedFoodGroup;
-    const matchesDietary = selectedDietaryFilters.length === 0 || 
-      selectedDietaryFilters.every(filter => {
-        switch(filter) {
-          case 'vegan':
-            return food.dietaryInfo.isVegan;
-          case 'vegetarian':
-            return food.dietaryInfo.isVegetarian;
-          case 'glutenFree':
-            return food.dietaryInfo.isGlutenFree;
-          case 'dairyFree':
-            return food.dietaryInfo.isDairyFree;
-          default:
-            return true;
-        }
+  const translate = (key: string, params?: Record<string, string>): string => {
+    let text = languageContent[currentLanguage]?.[key] || languageContent.en[key] || key;
+    
+    if (params) {
+      Object.entries(params).forEach(([param, value]) => {
+        text = text.replace(`{${param}}`, value);
       });
-    return matchesSearch && matchesGroup && matchesDietary;
-  });
+    }
+    
+    return text;
+  };
 
+  // UI Components Start
   return (
     <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white pb-20">
       {!isAuthenticated ? (
-        // Login Page
+        // Login Page with Language Selection
         <div className="min-h-screen flex items-center justify-center px-4">
           <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
             <div className="text-center">
-              <h1 className="text-3xl font-bold text-gray-800">Gut Health Explorer</h1>
-              <p className="mt-2 text-gray-600">Track, learn, and improve your gut health</p>
+              <h1 className="text-3xl font-bold text-gray-800">{translate('appName')}</h1>
+              <p className="mt-2 text-gray-600">{translate('welcome')}</p>
             </div>
-            <form onSubmit={handleLogin} className="mt-8 space-y-6">
+
+            {/* Language Selector */}
+            <div className="flex justify-center space-x-2 mb-6">
+              {(['en', 'es', 'zh', 'hi', 'ar'] as SupportedLanguage[]).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setCurrentLanguage(lang)}
+                  className={`px-3 py-1 rounded-full ${
+                    currentLanguage === lang
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {lang.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (userProfile.username.trim()) {
+                setIsAuthenticated(true);
+              }
+            }} className="mt-8 space-y-6">
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                  Username
+                  {translate('username')}
                 </label>
                 <input
                   id="username"
@@ -599,36 +676,113 @@ export default function Home() {
                   value={userProfile.username}
                   onChange={(e) => setUserProfile(prev => ({ ...prev, username: e.target.value }))}
                   className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your username"
+                  placeholder={translate('enterUsername')}
                 />
               </div>
+
+              {/* Cultural Preferences */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {translate('culturalPreferences')}
+                </label>
+                <div className="space-y-2">
+                  {Object.keys(culturalFoodData).map((culture) => (
+                    <label key={culture} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={userProfile.dietaryPreferences.culturalPreferences.includes(culture)}
+                        onChange={(e) => {
+                          setUserProfile(prev => ({
+                            ...prev,
+                            dietaryPreferences: {
+                              ...prev.dietaryPreferences,
+                              culturalPreferences: e.target.checked
+                                ? [...prev.dietaryPreferences.culturalPreferences, culture]
+                                : prev.dietaryPreferences.culturalPreferences.filter(c => c !== culture)
+                            }
+                          }));
+                        }}
+                        className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-gray-700">{translate(culture)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dietary Restrictions */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {translate('dietaryRestrictions')}
+                </label>
+                <div className="space-y-2">
+                  {['vegan', 'vegetarian', 'glutenFree', 'dairyFree'].map((restriction) => (
+                    <label key={restriction} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={userProfile.dietaryPreferences.restrictions.includes(restriction)}
+                        onChange={(e) => {
+                          setUserProfile(prev => ({
+                            ...prev,
+                            dietaryPreferences: {
+                              ...prev.dietaryPreferences,
+                              restrictions: e.target.checked
+                                ? [...prev.dietaryPreferences.restrictions, restriction]
+                                : prev.dietaryPreferences.restrictions.filter(r => r !== restriction)
+                            }
+                          }));
+                        }}
+                        className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-gray-700">{translate(restriction)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <button
                 type="submit"
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                Start Your Journey
+                {translate('startJourney')}
               </button>
             </form>
           </div>
         </div>
-      ) : (<>
+      ) : (
+
+
+
+    // Main App
+        <>
           <header className="bg-white shadow-md fixed top-0 left-0 right-0 z-40">
             <div className="max-w-7xl mx-auto px-4 py-4">
               <div className="flex justify-between items-center">
-                <h1 className="text-xl font-bold text-gray-800">Gut Health Explorer</h1>
+                <h1 className="text-xl font-bold text-gray-800">{translate('appName')}</h1>
                 <div className="flex items-center space-x-4">
                   <span className="text-gray-600">
-                    Welcome, {userProfile.username}
+                    {translate('welcome')}, {userProfile.username}
                   </span>
                   <div className={`px-3 py-1 rounded-full ${getHealthColor()} bg-opacity-10`}>
-                    Health Score: {gutHealth}%
+                    {translate('healthScore')}: {gutHealth}%
                   </div>
+                  <select
+                    value={currentLanguage}
+                    onChange={(e) => setCurrentLanguage(e.target.value as SupportedLanguage)}
+                    className="ml-2 border rounded-md px-2 py-1"
+                  >
+                    {(['en', 'es', 'zh', 'hi', 'ar'] as SupportedLanguage[]).map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
           </header>
 
-          <div className="pt-16 pb-16"> {/* Padding for fixed header and bottom nav */}
+          <div className="pt-16 pb-16">
             {/* Tab Navigation */}
             <div className="bg-white border-b">
               <div className="max-w-7xl mx-auto px-4">
@@ -641,7 +795,7 @@ export default function Home() {
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    Gut Health Meter
+                    {translate('gutHealthMeter')}
                   </button>
                   <button
                     onClick={() => setActiveTab('planner')}
@@ -651,7 +805,17 @@ export default function Home() {
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    Meal Planner
+                    {translate('mealPlanner')}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('learn')}
+                    className={`px-3 py-4 text-sm font-medium border-b-2 ${
+                      activeTab === 'learn'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {translate('learn')}
                   </button>
                   <button
                     onClick={() => setActiveTab('social')}
@@ -661,7 +825,7 @@ export default function Home() {
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    Community Recipes
+                    {translate('community')}
                   </button>
                   <button
                     onClick={() => setActiveTab('profile')}
@@ -671,710 +835,676 @@ export default function Home() {
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    Profile
+                    {translate('profile')}
                   </button>
                 </nav>
               </div>
             </div>
 
+            {/* Secondary Navigation for Meter Tab */}
+            {activeTab === 'meter' && (
+              <div className="bg-gray-50 border-b">
+                <div className="max-w-7xl mx-auto px-4">
+                  <div className="flex space-x-4 py-2">
+                    <button
+                      onClick={() => setActiveSection('main')}
+                      className={`px-3 py-1 rounded-full ${
+                        activeSection === 'main'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      {translate('overview')}
+                    </button>
+                    <button
+                      onClick={() => setActiveSection('microbiome')}
+                      className={`px-3 py-1 rounded-full ${
+                        activeSection === 'microbiome'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      {translate('microbiome')}
+                    </button>
+                    <button
+                      onClick={() => setActiveSection('nutrients')}
+                      className={`px-3 py-1 rounded-full ${
+                        activeSection === 'nutrients'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      {translate('nutrients')}
+                    </button>
+                    <button
+                      onClick={() => setActiveSection('studies')}
+                      className={`px-3 py-1 rounded-full ${
+                        activeSection === 'studies'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      {translate('studies')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Main Content Area */}
             <div className="max-w-7xl mx-auto px-4 py-8">
 
-{activeTab === 'meter' && (
+
+    {activeTab === 'meter' && (
                 <div className="space-y-8">
-                  {/* Gut Health Meter Section */}
-                  <section className="bg-white rounded-lg shadow-lg p-6">
-                    <h2 className="text-2xl font-semibold text-gray-800 mb-6">Gut Health Meter</h2>
-                    
-                    {/* Health Meter */}
-                    <div className="mb-8">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-gray-600">Current Gut Health</span>
-                        <span className={`text-2xl font-bold ${getHealthColor()}`}>
-                          {gutHealth}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-4">
-                        <div
-                          className={`h-4 rounded-full transition-all duration-500 ${
-                            gutHealth > 70 ? 'bg-green-500' : gutHealth > 40 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${gutHealth}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Drag & Drop Zone */}
-                    <div
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={handleFoodDrop}
-                      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-8 hover:border-blue-500 transition-colors min-h-[200px] flex flex-col items-center justify-center"
-                    >
-                      <p className="text-gray-600 mb-4">Drag foods here to see how they affect your gut health</p>
-                      {/* Added Foods Display */}
-                      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {meterFoods.map((food) => (
-                          <div
-                            key={food.id}
-                            className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"
-                          >
+                  {activeSection === 'main' && (
+                    <>
+                      {/* Gut Health Meter Section */}
+                      <section className="bg-white rounded-lg shadow-lg p-6">
+                        <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                          {translate('gutHealthMeter')}
+                        </h2>
+                        
+                        {/* Health Meters */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                          {/* Overall Gut Health */}
+                          <div>
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-2xl">{food.icon}</span>
-                              <button
-                                onClick={() => removeFood(food.id)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                ×
-                              </button>
+                              <span className="text-gray-600">{translate('overallGutHealth')}</span>
+                              <span className={`text-2xl font-bold ${getHealthColor()}`}>
+                                {gutHealth}%
+                              </span>
                             </div>
-                            <div className="font-medium">{food.name}</div>
-                            {food.editable && (
-                              <button
-                                onClick={() => editFood(food.id)}
-                                className="text-sm text-blue-500 hover:text-blue-700 mt-2"
-                              >
-                                Edit
-                              </button>
-                            )}
+                            <div className="w-full bg-gray-200 rounded-full h-4">
+                              <div
+                                className={`h-4 rounded-full transition-all duration-500 ${
+                                  gutHealth > 70 ? 'bg-green-500' : gutHealth > 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${gutHealth}%` }}
+                              ></div>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
 
-                    {/* Food Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {[...foodItems, ...customFoods].map((food) => (
-                        <div
-                          key={food.id}
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('foodId', food.id);
-                          }}
-                          className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all cursor-move"
-                        >
-                          <div className="text-3xl mb-2">{food.icon}</div>
-                          <div className="font-medium">{food.name}</div>
-                          <div className="text-sm text-gray-600">{food.foodGroup}</div>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              food.impact === 'positive' ? 'bg-green-100 text-green-800' :
-                              food.impact === 'negative' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {healthImpacts[food.impact].label}
-                            </span>
+                          {/* Microbiome Balance */}
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-gray-600">{translate('microbiomeBalance')}</span>
+                              <span className="text-2xl font-bold text-blue-500">
+                                {microbiomeBalance}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-4">
+                              <div
+                                className="h-4 rounded-full transition-all duration-500 bg-blue-500"
+                                style={{ width: `${microbiomeBalance}%` }}
+                              ></div>
+                            </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
 
-                    {/* Add Custom Food Button */}
-                    <button
-                      onClick={() => {
-                        setEditingFoodId(null);
-                        setNewCustomFood({
-                          name: '',
-                          category: 'neutral',
-                          icon: '🍽️',
-                          impact: 'neutral',
-                          description: '',
-                          foodGroup: 'Snacks & Others',
-                          dietaryInfo: {
-                            isVegan: false,
-                            isVegetarian: false,
-                            isGlutenFree: false,
-                            isDairyFree: false
-                          }
-                        });
-                        setShowAddCustomFood(true);
-                      }}
-                      className="mt-6 w-full py-3 px-4 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-colors"
-                    >
-                      + Add Custom Food
-                    </button>
-                  </section>
+                        {/* Drag & Drop Zone */}
+                        <div
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={handleFoodDrop}
+                          className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-8 hover:border-blue-500 transition-colors min-h-[200px] flex flex-col items-center justify-center"
+                        >
+                          <p className="text-gray-600 mb-4">{translate('dragFoodsHere')}</p>
+                          
+                          {/* Added Foods Display */}
+                          <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {meterFoods.map((food) => (
+                              <div
+                                key={food.id}
+                                className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-2xl">{food.icon}</span>
+                                  <button
+                                    onClick={() => {
+                                      const newFoods = meterFoods.filter(f => f.id !== food.id);
+                                      setMeterFoods(newFoods);
+                                      updateMicrobiomeBalance(newFoods);
+                                      updateNutrientProfile(newFoods);
+                                    }}
+                                    className="text-red-500 hover:text-red-700"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                <div className="font-medium">{food.name}</div>
+                                <div className="text-sm text-gray-600">{translate(food.impact)}</div>
+                                {food.studies.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedStudy(food.studies[0]);
+                                      setActiveSection('studies');
+                                    }}
+                                    className="text-xs text-blue-500 hover:text-blue-700 mt-2"
+                                  >
+                                    {translate('viewStudy')}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
 
-                  {/* Recent Reactions */}
-                  {recentReactions.length > 0 && (
+                        {/* Real-time Analysis */}
+                        {meterFoods.length > 0 && (
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <h3 className="font-semibold text-blue-800 mb-2">
+                              {translate('realTimeAnalysis')}
+                            </h3>
+                            <ul className="space-y-2">
+                              <li className="flex items-center">
+                                <span className="w-1/3 text-gray-600">{translate('beneficialFoods')}:</span>
+                                <span className="text-green-600">
+                                  {meterFoods.filter(f => f.impact === 'positive').length}
+                                </span>
+                              </li>
+                              <li className="flex items-center">
+                                <span className="w-1/3 text-gray-600">{translate('harmfulFoods')}:</span>
+                                <span className="text-red-600">
+                                  {meterFoods.filter(f => f.impact === 'negative').length}
+                                </span>
+                              </li>
+                              <li className="flex items-center">
+                                <span className="w-1/3 text-gray-600">{translate('microbiomeStatus')}:</span>
+                                <span className="text-blue-600">
+                                  {getMicrobiomeStatus()}
+                                </span>
+                              </li>
+                            </ul>
+                          </div>
+                        )}
+                      </section>
+
+                      {/* Health Trends */}
+                      <section className="bg-white rounded-lg shadow-lg p-6">
+                        <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                          {translate('healthTrends')}
+                        </h3>
+                        <div className="space-y-4">
+                          {healthTrends.slice(-5).map((trend, index) => (
+                            <div key={index} className="border-b pb-4">
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">
+                                  {new Date(trend.date).toLocaleDateString()}
+                                </span>
+                                <span className={`font-medium ${
+                                  trend.gutHealth > 70 ? 'text-green-500' :
+                                  trend.gutHealth > 40 ? 'text-yellow-500' : 'text-red-500'
+                                }`}>
+                                  {trend.gutHealth}%
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {translate('microbiomeBalance')}: {trend.microbiomeBalance}%
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  )}
+
+                  {activeSection === 'microbiome' && (
                     <section className="bg-white rounded-lg shadow-lg p-6">
-                      <h3 className="font-semibold text-gray-800 mb-4">Recent Foods</h3>
-                      <ul className="space-y-2">
-                        {recentReactions.map((reaction, index) => (
-                          <li key={index} className="text-gray-600">{reaction}</li>
+                      <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                        {translate('microbiomeVisualization')}
+                      </h2>
+                      
+                      {/* Microbiome Distribution */}
+                      <div className="mb-8">
+                        <h3 className="text-lg font-medium mb-4">{translate('bacterialDistribution')}</h3>
+                        <div className="relative h-8 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="absolute h-full bg-green-500 transition-all duration-500"
+                            style={{ width: `${microbiomeData.beneficial}%` }}
+                          ></div>
+                          <div
+                            className="absolute h-full bg-red-500 transition-all duration-500"
+                            style={{ 
+                              left: `${microbiomeData.beneficial}%`,
+                              width: `${microbiomeData.harmful}%` 
+                            }}
+                          ></div>
+                          <div
+                            className="absolute h-full bg-gray-400 transition-all duration-500"
+                            style={{ 
+                              left: `${microbiomeData.beneficial + microbiomeData.harmful}%`,
+                              width: `${microbiomeData.neutral}%` 
+                            }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between mt-2 text-sm">
+                          <span className="text-green-500">{translate('beneficial')}: {microbiomeData.beneficial}%</span>
+                          <span className="text-red-500">{translate('harmful')}: {microbiomeData.harmful}%</span>
+                          <span className="text-gray-500">{translate('neutral')}: {microbiomeData.neutral}%</span>
+                        </div>
+                      </div>
+
+                      {/* Microbe Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {microbeDatabase.map((microbe) => (
+                          <div
+                            key={microbe.name}
+                            className="border rounded-lg p-4 hover:border-blue-500 transition-colors cursor-pointer"
+                            onClick={() => setSelectedMicrobe(microbe)}
+                          >
+                            <h4 className="font-medium text-gray-800">{microbe.name}</h4>
+                            <p className="text-sm text-gray-600 mt-2">{microbe.description}</p>
+                            <div className="mt-2">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                microbe.type === 'beneficial' ? 'bg-green-100 text-green-800' :
+                                microbe.type === 'harmful' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {translate(microbe.type)}
+                              </span>
+                            </div>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
+                    </section>
+                  )}
+
+              {activeSection === 'nutrients' && (
+                    <section className="bg-white rounded-lg shadow-lg p-6">
+                      <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                        {translate('nutrientAnalysis')}
+                      </h2>
+
+                      {/* Nutrient Overview */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div className="bg-green-50 rounded-lg p-4">
+                          <h3 className="font-medium text-green-800 mb-2">{translate('macronutrients')}</h3>
+                          {dailyNutrients
+                            .filter(n => n.category === 'macronutrient')
+                            .map(nutrient => (
+                              <div key={nutrient.name} className="mb-2">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{nutrient.name}</span>
+                                  <span>{nutrient.amount}{nutrient.unit}</span>
+                                </div>
+                                <div className="w-full bg-green-200 rounded-full h-2">
+                                  <div
+                                    className="bg-green-500 h-2 rounded-full"
+                                    style={{ width: `${Math.min(nutrient.dailyValue, 100)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <h3 className="font-medium text-blue-800 mb-2">{translate('vitamins')}</h3>
+                          {dailyNutrients
+                            .filter(n => n.category === 'vitamin')
+                            .map(nutrient => (
+                              <div key={nutrient.name} className="mb-2">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{nutrient.name}</span>
+                                  <span>{nutrient.amount}{nutrient.unit}</span>
+                                </div>
+                                <div className="w-full bg-blue-200 rounded-full h-2">
+                                  <div
+                                    className="bg-blue-500 h-2 rounded-full"
+                                    style={{ width: `${Math.min(nutrient.dailyValue, 100)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+
+                        <div className="bg-purple-50 rounded-lg p-4">
+                          <h3 className="font-medium text-purple-800 mb-2">{translate('minerals')}</h3>
+                          {dailyNutrients
+                            .filter(n => n.category === 'mineral')
+                            .map(nutrient => (
+                              <div key={nutrient.name} className="mb-2">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{nutrient.name}</span>
+                                  <span>{nutrient.amount}{nutrient.unit}</span>
+                                </div>
+                                <div className="w-full bg-purple-200 rounded-full h-2">
+                                  <div
+                                    className="bg-purple-500 h-2 rounded-full"
+                                    style={{ width: `${Math.min(nutrient.dailyValue, 100)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+
+                      {/* Nutrient Recommendations */}
+                      <div className="bg-gray-50 rounded-lg p-6">
+                        <h3 className="font-medium text-gray-800 mb-4">{translate('recommendations')}</h3>
+                        <div className="space-y-4">
+                          {dailyNutrients
+                            .filter(n => n.dailyValue < 50)
+                            .map(nutrient => (
+                              <div key={nutrient.name} className="flex items-start">
+                                <span className="text-red-500 mr-2">⚠️</span>
+                                <div>
+                                  <p className="text-gray-800">
+                                    {translate('lowNutrient', { nutrient: nutrient.name })}
+                                  </p>
+                                  <p className="text-sm text-gray-600">
+                                    {translate('nutrientSuggestion', { nutrient: nutrient.name })}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {activeSection === 'studies' && (
+                    <section className="bg-white rounded-lg shadow-lg p-6">
+                      <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                        {translate('scientificStudies')}
+                      </h2>
+
+                      {selectedStudy ? (
+                        <div className="space-y-6">
+                          <button
+                            onClick={() => setSelectedStudy(null)}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            ← {translate('backToStudies')}
+                          </button>
+
+                          <div className="bg-blue-50 rounded-lg p-6">
+                            <h3 className="text-xl font-medium text-gray-800 mb-4">
+                              {selectedStudy.title}
+                            </h3>
+                            <div className="space-y-4">
+                              <p className="text-gray-600">
+                                <span className="font-medium">{translate('authors')}:</span>{' '}
+                                {selectedStudy.authors.join(', ')}
+                              </p>
+                              <p className="text-gray-600">
+                                <span className="font-medium">{translate('journal')}:</span>{' '}
+                                {selectedStudy.journal} ({selectedStudy.year})
+                              </p>
+                              <p className="text-gray-600">
+                                <span className="font-medium">{translate('keyFindings')}:</span>{' '}
+                                {selectedStudy.findings}
+                              </p>
+                              <a
+                                href={selectedStudy.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 block mt-4"
+                              >
+                                {translate('readFullStudy')} →
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {scientificStudies.map((study) => (
+                            <div
+                              key={study.doi}
+                              className="border rounded-lg p-4 hover:border-blue-500 transition-colors cursor-pointer"
+                              onClick={() => setSelectedStudy(study)}
+                            >
+                              <h3 className="font-medium text-gray-800 mb-2">{study.title}</h3>
+                              <p className="text-sm text-gray-600">{study.findings}</p>
+                              <div className="mt-2 text-sm text-gray-500">
+                                {study.journal} ({study.year})
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </section>
                   )}
                 </div>
               )}
 
-
-{activeTab === 'planner' && (
+              {activeTab === 'learn' && (
                 <div className="space-y-8">
-                  {/* Day Navigation */}
-                  <div className="flex overflow-x-auto pb-2 -mx-2 px-2">
-                    {mealPlan.map((day) => (
-                      <button
-                        key={day.day}
-                        onClick={() => setSelectedDay(day.day)}
-                        className={`flex-shrink-0 px-4 py-2 rounded-full mr-2 ${
-                          selectedDay === day.day
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {day.day}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Meal Planner Grid */}
-                  {mealPlan.map((day) => (
-                    <div 
-                      key={day.day}
-                      className={day.day === selectedDay ? '' : 'hidden'}
-                    >
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {Object.entries(day.meals).map(([mealType, foods]) => (
-                          <div key={mealType} className="bg-white rounded-lg shadow-lg p-6">
-                            <div className="flex justify-between items-center mb-4">
-                              <h3 className="text-lg font-semibold capitalize">{mealType}</h3>
+                  {!currentQuiz ? (
+                    <>
+                      {/* Quiz Selection */}
+                      <section className="bg-white rounded-lg shadow-lg p-6">
+                        <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                          {translate('quizzes')}
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {['beginner', 'intermediate', 'advanced'].map((level) => (
+                            <div key={level} className="border rounded-lg p-6">
+                              <h3 className="text-lg font-medium text-gray-800 mb-2">
+                                {translate(level)}
+                              </h3>
+                              <p className="text-gray-600 mb-4">
+                                {translate(`${level}Description`)}
+                              </p>
                               <button
-                                onClick={() => {
-                                  setSelectedMealType(mealType);
-                                  setShowFoodSelector(true);
-                                }}
-                                className="text-blue-500 hover:text-blue-700"
+                                onClick={() => startQuiz(level as 'beginner' | 'intermediate' | 'advanced')}
+                                className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
                               >
-                                + Add Food
+                                {translate('startQuiz')}
                               </button>
                             </div>
-                            <div className="min-h-[200px] border-2 border-dashed border-gray-300 rounded-lg p-4">
-                              {foods.map((food, index) => (
-                                <div
-                                  key={`${food.id}-${index}`}
-                                  className="flex items-center bg-gray-50 rounded p-2 mb-2"
-                                >
-                                  <span className="text-2xl mr-2">{food.icon}</span>
-                                  <div>
-                                    <div className="font-medium">{food.name}</div>
-                                    <div className="text-sm text-gray-600">{food.foodGroup}</div>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const newMealPlan = [...mealPlan];
-                                      const dayIndex = newMealPlan.findIndex(d => d.day === day.day);
-                                      newMealPlan[dayIndex].meals[mealType as keyof typeof day.meals] =
-                                        foods.filter((_, i) => i !== index);
-                                      setMealPlan(newMealPlan);
-                                    }}
-                                    className="ml-auto text-red-500 hover:text-red-700"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
+                          ))}
+                        </div>
+                      </section>
+
+                      {/* Study Materials */}
+                      <section className="bg-white rounded-lg shadow-lg p-6">
+                        <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                          {translate('studyMaterials')}
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {scientificStudies.map((study) => (
+                            <div key={study.doi} className="border rounded-lg p-4">
+                              <h3 className="font-medium text-gray-800 mb-2">{study.title}</h3>
+                              <p className="text-sm text-gray-600 mb-4">{study.findings}</p>
+                              <a
+                                href={study.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700"
+                              >
+                                {translate('readMore')} →
+                              </a>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  ) : (
+                    <section className="bg-white rounded-lg shadow-lg p-6">
+                      <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-semibold text-gray-800">
+                          {currentQuiz.topic}
+                        </h2>
+                        <span className="text-gray-600">
+                          {translate('question')} {quizProgress.currentQuestion + 1}/{currentQuiz.questions.length}
+                        </span>
                       </div>
 
-                      {/* Save as Recipe Button */}
-                      <button
-                        onClick={() => {
-                          const dayFoods = Object.values(day.meals).flat();
-                          if (dayFoods.length > 0) {
-                            setNewRecipe({
-                              name: `${day.day}'s Meals`,
-                              description: 'Custom meal plan recipe',
-                              foods: dayFoods,
-                              instructions: [],
-                              tags: [],
-                              mealType: 'breakfast',
-                              prepTime: '',
-                              servings: 1
-                            });
-                            setShowRecipeCreator(true);
-                          }
-                        }}
-                        className="mt-6 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-                      >
-                        Save Day as Recipe
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {activeTab === 'social' && (
-                <div className="space-y-8">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-semibold text-gray-800">Community Recipes</h2>
-                    <button
-                      onClick={() => {
-                        setNewRecipe({
-                          name: '',
-                          description: '',
-                          foods: [],
-                          instructions: [],
-                          tags: [],
-                          mealType: 'breakfast',
-                          prepTime: '',
-                          servings: 1
-                        });
-                        setShowRecipeCreator(true);
-                      }}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                    >
-                      Share New Recipe
-                    </button>
-                  </div>
-
-                  {/* Recipe Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {recipes.map((recipe) => (
-                      <div key={recipe.id} className="bg-white rounded-lg shadow-lg overflow-hidden">
-                        <div className="p-6">
-                          <div className="flex justify-between items-start">
-                            <h3 className="text-lg font-semibold">{recipe.name}</h3>
-                            <span className={`px-2 py-1 rounded-full text-sm ${
-                              recipe.healthScore > 70 ? 'bg-green-100 text-green-800' :
-                              recipe.healthScore > 40 ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              Score: {recipe.healthScore}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 mt-2">{recipe.description}</p>
-                          
-                          {/* Recipe Details */}
-                          <div className="mt-4 space-y-4">
-                            <div className="flex flex-wrap gap-2">
-                              {recipe.foods.map((food, index) => (
-                                <span
+                      {!showStudyMaterial ? (
+                        <div className="space-y-6">
+                          <div className="bg-blue-50 rounded-lg p-6">
+                            <h3 className="text-xl font-medium text-gray-800 mb-4">
+                              {currentQuiz.questions[quizProgress.currentQuestion].question}
+                            </h3>
+                            <div className="space-y-4">
+                              {currentQuiz.questions[quizProgress.currentQuestion].options.map((option, index) => (
+                                <button
                                   key={index}
-                                  className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full text-sm"
+                                  onClick={() => handleQuizAnswer(index)}
+                                  className="w-full text-left p-4 rounded-lg bg-white hover:bg-gray-50 border transition-colors"
                                 >
-                                  {food.icon} {food.name}
-                                </span>
+                                  {option}
+                                </button>
                               ))}
                             </div>
-                            
-                            {recipe.instructions && recipe.instructions.length > 0 && (
-                              <div className="mt-4">
-                                <h4 className="font-medium text-gray-700 mb-2">Instructions:</h4>
-                                <ol className="list-decimal list-inside space-y-1 text-gray-600 text-sm">
-                                  {recipe.instructions.map((instruction, index) => (
-                                    <li key={index}>{instruction}</li>
-                                  ))}
-                                </ol>
-                              </div>
-                            )}
+                          </div>
 
-                            {recipe.prepTime && (
-                              <div className="text-sm text-gray-600">
-                                Prep Time: {recipe.prepTime}
+                          {quizProgress.answers.includes(currentQuiz.questions[quizProgress.currentQuestion].correctAnswer) && (
+                            <div className="bg-green-50 rounded-lg p-4">
+                              <p className="text-green-800">
+                                {currentQuiz.questions[quizProgress.currentQuestion].explanation}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          <div className="bg-blue-50 rounded-lg p-6">
+                            <h3 className="text-xl font-medium text-gray-800 mb-4">
+                              {translate('quizComplete')}
+                            </h3>
+                            <p className="text-gray-600 mb-4">
+                              {translate('score')}: {Math.round((quizProgress.score / currentQuiz.questions.length) * 100)}%
+                            </p>
+                            {currentQuiz.studyMaterials.map((study, index) => (
+                              <div key={index} className="mb-4">
+                                <h4 className="font-medium text-gray-800 mb-2">{study.title}</h4>
+                                <p className="text-sm text-gray-600 mb-2">{study.findings}</p>
+                                <a
+                                  href={study.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-500 hover:text-blue-700"
+                                >
+                                  {translate('readMore')} →
+                                </a>
                               </div>
-                            )}
+                            ))}
                           </div>
+                          <button
+                            onClick={() => {
+                              setCurrentQuiz(null);
+                              setShowStudyMaterial(false);
+                            }}
+                            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                          >
+                            {translate('backToQuizzes')}
+                          </button>
                         </div>
-                        
-                        <div className="border-t px-6 py-4 bg-gray-50 flex justify-between items-center">
-                          <div className="text-sm text-gray-600">
-                            By {recipe.createdBy}
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <button
-                              onClick={() => toggleRecipeLike(recipe.id)}
-                              className={`flex items-center space-x-1 ${
-                                recipe.likedBy.includes(userProfile.username)
-                                  ? 'text-red-500'
-                                  : 'text-gray-500 hover:text-red-500'
-                              }`}
-                            >
-                              <span>❤️</span>
-                              <span>{recipe.likes}</span>
-                            </button>
-                            <button
-                              onClick={() => saveRecipe(recipe)}
-                              className={`text-blue-500 hover:text-blue-700 ${
-                                userProfile.favoriteRecipes.some(r => r.id === recipe.id)
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : ''
-                              }`}
-                              disabled={userProfile.favoriteRecipes.some(r => r.id === recipe.id)}
-                            >
-                              {userProfile.favoriteRecipes.some(r => r.id === recipe.id)
-                                ? 'Saved'
-                                : 'Save'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      )}
+                    </section>
+                  )}
                 </div>
               )}
 
- {activeTab === 'profile' && (
+    {activeTab === 'profile' && (
                 <div className="space-y-8">
-                  {/* Profile Header */}
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="flex items-center space-x-4">
+                  {/* Profile Overview */}
+                  <section className="bg-white rounded-lg shadow-lg p-6">
+                    <div className="flex items-center space-x-4 mb-6">
                       <div className="bg-blue-100 rounded-full p-4">
                         <span className="text-2xl">👤</span>
                       </div>
                       <div>
                         <h2 className="text-2xl font-semibold">{userProfile.username}</h2>
-                        <p className="text-gray-600">Gut Health Score: {gutHealth}%</p>
+                        <p className="text-gray-600">{translate('memberSince')}: {
+                          new Date().toLocaleDateString()
+                        }</p>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Saved Recipes */}
-                  <div className="bg-white rounded-lg shadow-lg p-6">
-                    <h3 className="text-xl font-semibold mb-4">Saved Recipes</h3>
-                    {userProfile.favoriteRecipes.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {userProfile.favoriteRecipes.map((recipe) => (
-                          <div key={recipe.id} className="border rounded-lg p-4">
-                            <div className="flex justify-between items-start">
-                              <h4 className="font-medium">{recipe.name}</h4>
-                              <span className={`px-2 py-1 rounded-full text-sm ${
-                                recipe.healthScore > 70 ? 'bg-green-100 text-green-800' :
-                                recipe.healthScore > 40 ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                Score: {recipe.healthScore}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-2">{recipe.description}</p>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {recipe.foods.map((food, index) => (
-                                <span
-                                  key={index}
-                                  className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full text-xs"
-                                >
-                                  {food.icon} {food.name}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
+                    {/* Health Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <h3 className="font-medium text-green-800 mb-2">{translate('gutHealth')}</h3>
+                        <div className="text-3xl font-bold text-green-600">{gutHealth}%</div>
+                        <p className="text-sm text-green-700 mt-1">{translate('healthStatus')}</p>
                       </div>
-                    ) : (
-                      <p className="text-gray-600">No saved recipes yet. Explore the community recipes to find some!</p>
-                    )}
-                  </div>
+                      <div className="bg-blue-50 rounded-lg p-4">
+                        <h3 className="font-medium text-blue-800 mb-2">{translate('quizzesCompleted')}</h3>
+                        <div className="text-3xl font-bold text-blue-600">
+                          {userProfile.completedQuizzes.length}
+                        </div>
+                        <p className="text-sm text-blue-700 mt-1">{translate('averageScore')}: {
+                          userProfile.completedQuizzes.length > 0
+                            ? Math.round(userProfile.completedQuizzes.reduce((acc, quiz) => acc + quiz.score, 0) / userProfile.completedQuizzes.length)
+                            : 0
+                        }%</p>
+                      </div>
+                      <div className="bg-purple-50 rounded-lg p-4">
+                        <h3 className="font-medium text-purple-800 mb-2">{translate('savedRecipes')}</h3>
+                        <div className="text-3xl font-bold text-purple-600">
+                          {userProfile.favoriteRecipes.length}
+                        </div>
+                        <p className="text-sm text-purple-700 mt-1">{translate('recipesTracked')}</p>
+                      </div>
+                    </div>
+
+                    {/* Preferences */}
+                    <div className="border-t pt-6">
+                      <h3 className="text-lg font-medium text-gray-800 mb-4">{translate('preferences')}</h3>
+                      <div className="space-y-4">
+                        {/* Dietary Preferences */}
+                        <div>
+                          <h4 className="font-medium text-gray-700 mb-2">{translate('dietaryPreferences')}</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {userProfile.dietaryPreferences.restrictions.map((restriction) => (
+                              <span
+                                key={restriction}
+                                className="px-3 py-1 bg-gray-100 rounded-full text-gray-700 text-sm"
+                              >
+                                {translate(restriction)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Cultural Preferences */}
+                        <div>
+                          <h4 className="font-medium text-gray-700 mb-2">{translate('culturalPreferences')}</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {userProfile.dietaryPreferences.culturalPreferences.map((culture) => (
+                              <span
+                                key={culture}
+                                className="px-3 py-1 bg-blue-100 rounded-full text-blue-700 text-sm"
+                              >
+                                {translate(culture)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Health Trends */}
+                  <section className="bg-white rounded-lg shadow-lg p-6">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">{translate('healthTrends')}</h3>
+                    <div className="space-y-4">
+                      {healthTrends.map((trend, index) => (
+                        <div key={index} className="border-b pb-4">
+                          <div className="flex justify-between mb-2">
+                            <span className="text-gray-600">
+                              {new Date(trend.date).toLocaleDateString()}
+                            </span>
+                            <span className={`font-medium ${
+                              trend.gutHealth > 70 ? 'text-green-500' :
+                              trend.gutHealth > 40 ? 'text-yellow-500' : 'text-red-500'
+                            }`}>
+                              {trend.gutHealth}%
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {translate('microbiomeBalance')}: {trend.microbiomeBalance}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 </div>
               )}
             </div>
           </div>
-
-          {/* Food Selector Modal */}
-          {showFoodSelector && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold">Add Food</h3>
-                  <button
-                    onClick={() => setShowFoodSelector(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                {/* Search and Filters */}
-                <div className="mb-6 space-y-4">
-                  <input
-                    type="text"
-                    placeholder="Search foods..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    {foodCategories.map((category) => (
-                      <button
-                        key={category}
-                        onClick={() => setSelectedFoodGroup(category)}
-                        className={`px-3 py-1 rounded-full ${
-                          selectedFoodGroup === category
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {category}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Food Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {filteredFoods.map((food) => (
-                    <button
-                      key={food.id}
-                      onClick={() => addFoodToMeal(food)}
-                      className="p-4 rounded-lg border hover:border-blue-500 transition-all text-center"
-                    >
-                      <div className="text-3xl mb-2">{food.icon}</div>
-                      <div className="font-medium">{food.name}</div>
-                      <div className="text-sm text-gray-600">{food.foodGroup}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Custom Food Modal with Emoji Picker */}
-          {showAddCustomFood && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold">
-                    {editingFoodId ? 'Edit Food' : 'Add Custom Food'}
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setShowAddCustomFood(false);
-                      setEditingFoodId(null);
-                    }}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  if (editingFoodId) {
-                    updateFood(newCustomFood as FoodItem);
-                  } else {
-                    addCustomFood();
-                  }
-                }} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Name</label>
-                    <input
-                      type="text"
-                      value={newCustomFood.name}
-                      onChange={(e) => setNewCustomFood(prev => ({ ...prev, name: e.target.value }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Choose an Emoji</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowEmojiPicker(true)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-left"
-                    >
-                      {newCustomFood.icon} Select Emoji
-                    </button>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Food Group</label>
-                    <select
-                      value={newCustomFood.foodGroup}
-                      onChange={(e) => setNewCustomFood(prev => ({ ...prev, foodGroup: e.target.value }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      {foodCategories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Impact on Gut Health</label>
-                    <select
-                      value={newCustomFood.impact}
-                      onChange={(e) => setNewCustomFood(prev => ({ 
-                        ...prev, 
-                        impact: e.target.value as FoodItem['impact']
-                      }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="positive">Beneficial</option>
-                      <option value="negative">Harmful</option>
-                      <option value="neutral">Neutral</option>
-                    </select>
-                  </div>
-
-                  <div className="flex justify-end space-x-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddCustomFood(false);
-                        setEditingFoodId(null);
-                      }}
-                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    >
-                      {editingFoodId ? 'Update Food' : 'Add Food'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Emoji Picker Modal */}
-          {showEmojiPicker && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Select an Emoji</h3>
-                  <button
-                    onClick={() => setShowEmojiPicker(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                {/* Emoji Categories */}
-                <div className="flex overflow-x-auto pb-2 mb-4">
-                  {Object.keys(foodEmojis).map((category) => (
-                    <button
-                      key={category}
-                      onClick={() => setSelectedEmojiCategory(category)}
-                      className={`flex-shrink-0 px-3 py-1 rounded-full mr-2 ${
-                        selectedEmojiCategory === category
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Emoji Grid */}
-                <div className="grid grid-cols-6 gap-2">
-                  {foodEmojis[selectedEmojiCategory].map((emoji, index) => (
-                    <button
-                      key={`${emoji}-${index}`}
-                      onClick={() => {
-                        setNewCustomFood(prev => ({ ...prev, icon: emoji }));
-                        setShowEmojiPicker(false);
-                      }}
-                      className="text-2xl p-2 hover:bg-gray-100 rounded"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Recipe Creator Modal */}
-          {showRecipeCreator && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold">Create New Recipe</h3>
-                  <button
-                    onClick={() => setShowRecipeCreator(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ×
-                  </button>
-                </div>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  createNewRecipe();
-                }} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Recipe Name</label>
-                    <input
-                      type="text"
-                      value={newRecipe.name}
-                      onChange={(e) => setNewRecipe(prev => ({ ...prev, name: e.target.value }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Description</label>
-                    <textarea
-                      value={newRecipe.description}
-                      onChange={(e) => setNewRecipe(prev => ({ ...prev, description: e.target.value }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Instructions</label>
-                    <textarea
-                      value={newRecipe.instructions?.join('\n')}
-                      onChange={(e) => setNewRecipe(prev => ({ 
-                        ...prev, 
-                        instructions: e.target.value.split('\n').filter(line => line.trim())
-                      }))}
-                      placeholder="Enter each instruction on a new line"
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                      rows={5}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Prep Time</label>
-                      <input
-                        type="text"
-                        value={newRecipe.prepTime}
-                        onChange={(e) => setNewRecipe(prev => ({ ...prev, prepTime: e.target.value }))}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="e.g., 15 minutes"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Servings</label>
-                      <input
-                        type="number"
-                        value={newRecipe.servings}
-                        onChange={(e) => setNewRecipe(prev => ({ 
-                          ...prev, 
-                          servings: parseInt(e.target.value) || 1
-                        }))}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-                        min="1"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end space-x-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowRecipeCreator(false)}
-                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    >
-                      Create Recipe
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
 
           {/* Mobile Navigation */}
           <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
@@ -1386,7 +1516,7 @@ export default function Home() {
                 }`}
               >
                 <span className="text-xl">📊</span>
-                <span className="text-xs">Health</span>
+                <span className="text-xs">{translate('health')}</span>
               </button>
               <button
                 onClick={() => setActiveTab('planner')}
@@ -1395,16 +1525,16 @@ export default function Home() {
                 }`}
               >
                 <span className="text-xl">📋</span>
-                <span className="text-xs">Planner</span>
+                <span className="text-xs">{translate('planner')}</span>
               </button>
               <button
-                onClick={() => setActiveTab('social')}
+                onClick={() => setActiveTab('learn')}
                 className={`flex flex-col items-center p-2 ${
-                  activeTab === 'social' ? 'text-blue-500' : 'text-gray-500'
+                  activeTab === 'learn' ? 'text-blue-500' : 'text-gray-500'
                 }`}
               >
-                <span className="text-xl">👥</span>
-                <span className="text-xs">Community</span>
+                <span className="text-xl">📚</span>
+                <span className="text-xs">{translate('learn')}</span>
               </button>
               <button
                 onClick={() => setActiveTab('profile')}
@@ -1413,7 +1543,7 @@ export default function Home() {
                 }`}
               >
                 <span className="text-xl">👤</span>
-                <span className="text-xs">Profile</span>
+                <span className="text-xs">{translate('profile')}</span>
               </button>
             </div>
           </nav>
