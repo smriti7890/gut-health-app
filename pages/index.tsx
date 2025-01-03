@@ -1,81 +1,88 @@
 import { useState } from 'react';
 
-interface BacteriaInfo {
+interface FoodItem {
   name: string;
-  description: string;
-  benefits: string[];
-  location: string;
+  category: 'probiotic' | 'prebiotic' | 'inflammatory' | 'neutral';
   icon: string;
-  category: 'beneficial' | 'essential' | 'protective';
-}
-
-interface DigestiveOrgan {
-  name: string;
+  effect: string;
+  impact: 'positive' | 'negative' | 'neutral';
   description: string;
-  role: string;
-  bacteria: string[];
-  position: string;
 }
 
-interface QuizQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation: string;
+interface GutReaction {
+  message: string;
+  healthImpact: number;
+  color: string;
 }
 
-const bacteriaData: BacteriaInfo[] = [
+const foodItems: FoodItem[] = [
   {
-    name: 'Lactobacillus',
-    description: 'Friendly bacteria that helps break down food and supports immune function',
-    benefits: ['Improves digestion', 'Produces vitamin K', 'Fights harmful bacteria'],
-    location: 'Small intestine and colon',
-    icon: '🦠',
-    category: 'beneficial'
+    name: 'Yogurt',
+    category: 'probiotic',
+    icon: '🥛',
+    effect: 'Adds beneficial bacteria',
+    impact: 'positive',
+    description: 'Rich in probiotics that support gut flora'
   },
   {
-    name: 'Bifidobacterium',
-    description: 'Essential bacteria that helps maintain digestive health',
-    benefits: ['Supports immune system', 'Produces B vitamins', 'Helps absorb nutrients'],
-    location: 'Large intestine',
-    icon: '🔬',
-    category: 'essential'
+    name: 'Kimchi',
+    category: 'probiotic',
+    icon: '🥬',
+    effect: 'Enhances gut diversity',
+    impact: 'positive',
+    description: 'Fermented vegetables full of healthy bacteria'
   },
   {
-    name: 'Escherichia coli',
-    description: 'Beneficial strains that help with vitamin production',
-    benefits: ['Produces vitamin K2', 'Helps digest food', 'Prevents harmful bacterial growth'],
-    location: 'Large intestine',
-    icon: '🧬',
-    category: 'protective'
+    name: 'Garlic',
+    category: 'prebiotic',
+    icon: '🧄',
+    effect: 'Feeds good bacteria',
+    impact: 'positive',
+    description: 'Prebiotic that helps beneficial bacteria thrive'
+  },
+  {
+    name: 'Processed Sugar',
+    category: 'inflammatory',
+    icon: '🍬',
+    effect: 'Disrupts gut balance',
+    impact: 'negative',
+    description: 'Can lead to inflammation and bacterial imbalance'
+  },
+  {
+    name: 'Green Vegetables',
+    category: 'prebiotic',
+    icon: '🥦',
+    effect: 'Supports gut health',
+    impact: 'positive',
+    description: 'High in fiber and nutrients for gut health'
+  },
+  {
+    name: 'Fast Food',
+    category: 'inflammatory',
+    icon: '🍔',
+    effect: 'Increases inflammation',
+    impact: 'negative',
+    description: 'Can disturb gut bacterial balance'
+  },
+  {
+    name: 'Banana',
+    category: 'prebiotic',
+    icon: '🍌',
+    effect: 'Feeds beneficial bacteria',
+    impact: 'positive',
+    description: 'Contains prebiotics that support gut health'
+  },
+  {
+    name: 'Kombucha',
+    category: 'probiotic',
+    icon: '🫖',
+    effect: 'Adds beneficial yeasts',
+    impact: 'positive',
+    description: 'Fermented tea with probiotics and antioxidants'
   }
 ];
 
-const digestiveSystem: DigestiveOrgan[] = [
-  {
-    name: 'Stomach',
-    description: 'Breaks down food using acid and enzymes',
-    role: 'Initial digestion and protein breakdown',
-    bacteria: ['Lactobacillus'],
-    position: 'top-1/3'
-  },
-  {
-    name: 'Small Intestine',
-    description: 'Absorbs nutrients from digested food',
-    role: 'Nutrient absorption and further digestion',
-    bacteria: ['Lactobacillus', 'Bifidobacterium'],
-    position: 'middle'
-  },
-  {
-    name: 'Large Intestine',
-    description: 'Absorbs water and processes waste',
-    role: 'Water absorption and bacterial fermentation',
-    bacteria: ['Bifidobacterium', 'Escherichia coli'],
-    position: 'bottom-1/3'
-  }
-];
-
-const quizQuestions: QuizQuestion[] = [
+const quizQuestions = [
   {
     question: 'What percentage of your immune system is located in your gut?',
     options: ['30%', '50%', '70%', '90%'],
@@ -105,7 +112,9 @@ const symptoms = [
 ];
 
 export default function Home() {
-  const [selectedOrgan, setSelectedOrgan] = useState<string | null>(null);
+  const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [gutHealth, setGutHealth] = useState<number>(70);
+  const [recentReactions, setRecentReactions] = useState<string[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [quizStarted, setQuizStarted] = useState<boolean>(false);
   const [currentQuestion, setCurrentQuestion] = useState<number>(0);
@@ -114,11 +123,27 @@ export default function Home() {
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [showSymptomResults, setShowSymptomResults] = useState<boolean>(false);
 
+  const handleFoodSelect = (food: FoodItem) => {
+    setSelectedFood(food);
+    const healthChange = food.impact === 'positive' ? 5 : food.impact === 'negative' ? -5 : 0;
+    const newHealth = Math.min(Math.max(gutHealth + healthChange, 0), 100);
+    setGutHealth(newHealth);
+    setRecentReactions(prev => [
+      `${food.icon} ${food.name}: ${food.effect}`,
+      ...prev.slice(0, 4)
+    ]);
+  };
+
+  const getHealthColor = () => {
+    if (gutHealth > 70) return 'text-green-500';
+    if (gutHealth > 40) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
   const handleAnswerSubmit = (answerIndex: number): void => {
     if (answerIndex === quizQuestions[currentQuestion].correctAnswer) {
       setScore(score + 1);
     }
-
     if (currentQuestion < quizQuestions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
@@ -141,80 +166,64 @@ export default function Home() {
     );
   };
 
-  const filteredBacteria = bacteriaData.filter(bacteria =>
-    activeFilter === 'all' ? true : bacteria.category === activeFilter
-  );
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <header className="bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold text-gray-800">Interactive Gut Health Explorer</h1>
-          <p className="text-gray-600 mt-2">Discover and learn about your digestive system</p>
+          <p className="text-gray-600 mt-2">Discover how different foods affect your gut health</p>
         </div>
       </header>
 
       <section className="max-w-7xl mx-auto px-4 py-12">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Digestive System Explorer</h2>
-        <div className="relative bg-white rounded-lg shadow-lg p-6 min-h-[400px]">
-          {digestiveSystem.map((organ) => (
-            <div
-              key={organ.name}
-              className={`absolute ${organ.position === 'top-1/3' ? 'top-12' : organ.position === 'middle' ? 'top-1/2 -translate-y-1/2' : 'bottom-12'} 
-                left-1/2 transform -translate-x-1/2 cursor-pointer transition-all
-                ${selectedOrgan === organ.name ? 'scale-110' : 'hover:scale-105'}`}
-              onClick={() => setSelectedOrgan(organ.name)}
-            >
-              <div className="bg-blue-100 rounded-lg p-4 text-center">
-                <h3 className="font-semibold text-blue-800">{organ.name}</h3>
-                {selectedOrgan === organ.name && (
-                  <div className="mt-4 animate-fadeIn">
-                    <p className="text-sm text-gray-600">{organ.description}</p>
-                    <p className="text-sm text-blue-700 mt-2">{organ.role}</p>
-                  </div>
-                )}
-              </div>
+        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Food Reaction Simulator</h2>
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Gut Health Meter</h3>
+              <span className={`text-2xl font-bold ${getHealthColor()}`}>
+                {gutHealth}%
+              </span>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="w-full bg-gray-200 rounded-full h-4">
+              <div
+                className={`h-4 rounded-full transition-all duration-500 ${
+                  gutHealth > 70 ? 'bg-green-500' : gutHealth > 40 ? 'bg-yellow-500' : 'bg-red-500'
+                }`}
+                style={{ width: `${gutHealth}%` }}
+              ></div>
+            </div>
+          </div>
 
-      <section className="max-w-7xl mx-auto px-4 py-12">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Bacteria Filter</h2>
-        <div className="flex gap-4 mb-6">
-          {['all', 'beneficial', 'essential', 'protective'].map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              className={`px-4 py-2 rounded-full ${
-                activeFilter === filter
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {filteredBacteria.map((bacteria) => (
-            <div
-              key={bacteria.name}
-              className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all transform hover:-translate-y-1"
-            >
-              <div className="text-4xl mb-4 animate-pulse">{bacteria.icon}</div>
-              <h3 className="text-xl font-semibold text-gray-800 mb-2">{bacteria.name}</h3>
-              <p className="text-gray-600 mb-4">{bacteria.description}</p>
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">Benefits:</p>
-                <ul className="list-disc list-inside text-gray-600 text-sm">
-                  {bacteria.benefits.map((benefit) => (
-                    <li key={benefit}>{benefit}</li>
-                  ))}
-                </ul>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {foodItems.map((food) => (
+              <button
+                key={food.name}
+                onClick={() => handleFoodSelect(food)}
+                className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all transform hover:-translate-y-1"
+              >
+                <div className="text-4xl mb-2">{food.icon}</div>
+                <div className="font-medium">{food.name}</div>
+                <div className="text-sm text-gray-600">{food.category}</div>
+              </button>
+            ))}
+          </div>
+
+          {selectedFood && (
+            <div className="bg-blue-50 p-4 rounded-lg mb-6">
+              <h4 className="font-semibold text-blue-800 mb-2">Food Effect:</h4>
+              <p className="text-gray-700">{selectedFood.description}</p>
             </div>
-          ))}
+          )}
+
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-800 mb-2">Recent Reactions:</h4>
+            <ul className="space-y-2">
+              {recentReactions.map((reaction, index) => (
+                <li key={index} className="text-gray-600">{reaction}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -293,7 +302,7 @@ export default function Home() {
               <ul className="list-disc list-inside text-gray-700 space-y-2">
                 <li>Consider keeping a food diary to identify trigger foods</li>
                 <li>Monitor your stress levels as they can affect gut health</li>
-                <li>Ensure you're staying hydrated throughout the day</li>
+                <li>Ensure you&apos;re staying hydrated throughout the day</li>
                 <li>Consider consulting with a healthcare professional for personalized advice</li>
               </ul>
             </div>
@@ -304,7 +313,7 @@ export default function Home() {
       <footer className="bg-gray-800 text-white py-8">
         <div className="max-w-7xl mx-auto px-4">
           <p className="text-center text-gray-400">
-            {'Learn more about your gut health by consulting with healthcare professionals'}
+            Learn more about your gut health by consulting with healthcare professionals
           </p>
         </div>
       </footer>
