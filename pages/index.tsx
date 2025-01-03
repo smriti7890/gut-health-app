@@ -9,10 +9,32 @@ interface FoodItem {
   description: string;
 }
 
-interface GutReaction {
-  message: string;
-  healthImpact: number;
-  color: string;
+interface MealPlan {
+  day: string;
+  meals: {
+    breakfast: FoodItem[];
+    lunch: FoodItem[];
+    dinner: FoodItem[];
+    snacks: FoodItem[];
+  };
+  healthScore: number;
+}
+
+interface SocialPost {
+  id: string;
+  username: string;
+  content: string;
+  mealPlan?: MealPlan;
+  likes: number;
+  comments: Comment[];
+  timestamp: string;
+}
+
+interface Comment {
+  id: string;
+  username: string;
+  content: string;
+  timestamp: string;
 }
 
 const foodItems: FoodItem[] = [
@@ -123,6 +145,48 @@ export default function Home() {
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [showSymptomResults, setShowSymptomResults] = useState<boolean>(false);
 
+const [mealPlan, setMealPlan] = useState<MealPlan[]>([
+    {
+      day: 'Monday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    },
+    {
+      day: 'Tuesday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    },
+    {
+      day: 'Wednesday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    },
+    {
+      day: 'Thursday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    },
+    {
+      day: 'Friday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    },
+    {
+      day: 'Saturday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    },
+    {
+      day: 'Sunday',
+      meals: { breakfast: [], lunch: [], dinner: [], snacks: [] },
+      healthScore: 0
+    }
+  ]);
+
+const [socialPosts, setSocialPosts] = useState<SocialPost[]>([]);
+  const [username, setUsername] = useState<string>('');
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+
   const handleFoodSelect = (food: FoodItem) => {
     setSelectedFood(food);
     const healthChange = food.impact === 'positive' ? 5 : food.impact === 'negative' ? -5 : 0;
@@ -200,7 +264,11 @@ export default function Home() {
               <button
                 key={food.name}
                 onClick={() => handleFoodSelect(food)}
-                className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all transform hover:-translate-y-1"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('food', JSON.stringify(food));
+                }}
+                className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all transform hover:-translate-y-1 cursor-move"
               >
                 <div className="text-4xl mb-2">{food.icon}</div>
                 <div className="font-medium">{food.name}</div>
@@ -224,6 +292,105 @@ export default function Home() {
               ))}
             </ul>
           </div>
+        </div>
+      </section>
+
+     <section className="max-w-7xl mx-auto px-4 py-12">
+        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Weekly Meal Planner</h2>
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          {!isLoggedIn ? (
+            <div className="text-center py-8">
+              <input
+                type="text"
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="px-4 py-2 border rounded-lg mr-4"
+              />
+              <button
+                onClick={() => setIsLoggedIn(true)}
+                className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Start Planning
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {mealPlan.map((day) => (
+                <div key={day.day} className="mb-8 border-b pb-6">
+                  <h3 className="text-xl font-semibold mb-4">{day.day}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {Object.entries(day.meals).map(([mealType, foods]) => (
+                      <div key={mealType} className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-medium mb-2 capitalize">{mealType}</h4>
+                        <div
+                          className="min-h-[100px] bg-white rounded border-2 border-dashed border-gray-300 p-2"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const food = JSON.parse(e.dataTransfer.getData('food'));
+                            const newMealPlan = [...mealPlan];
+                            const dayIndex = newMealPlan.findIndex(d => d.day === day.day);
+                            newMealPlan[dayIndex].meals[mealType as keyof typeof day.meals].push(food);
+                            setMealPlan(newMealPlan);
+                          }}
+                        >
+                          {foods.map((food: FoodItem, index: number) => (
+                            <div key={index} className="flex items-center bg-blue-50 rounded p-2 mb-2">
+                              <span className="mr-2">{food.icon}</span>
+                              <span>{food.name}</span>
+                              <button
+                                onClick={() => {
+                                  const newMealPlan = [...mealPlan];
+                                  const dayIndex = newMealPlan.findIndex(d => d.day === day.day);
+                                  newMealPlan[dayIndex].meals[mealType as keyof typeof day.meals] =
+                                    foods.filter((_, i) => i !== index);
+                                  setMealPlan(newMealPlan);
+                                }}
+                                className="ml-auto text-red-500 hover:text-red-700"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                      Daily Health Score:
+                      <span className={`ml-2 font-medium ${
+                        day.healthScore > 70 ? 'text-green-500' :
+                        day.healthScore > 40 ? 'text-yellow-500' : 'text-red-500'
+                      }`}>
+                        {day.healthScore}%
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSocialPosts([
+                          {
+                            id: Date.now().toString(),
+                            username,
+                            content: `Check out my meal plan for ${day.day}!`,
+                            mealPlan: day,
+                            likes: 0,
+                            comments: [],
+                            timestamp: new Date().toISOString()
+                          },
+                          ...socialPosts
+                        ]);
+                      }}
+                      className="text-blue-500 hover:text-blue-700"
+                    >
+                      Share This Day
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
